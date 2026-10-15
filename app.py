@@ -1,3 +1,16 @@
+import sys
+import subprocess
+
+# تثبيت المكتبات تلقائياً إذا لم تكن موجودة
+def install_packages():
+    for package in ["streamlit", "pandas"]:
+        try:
+            __import__(package)
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+install_packages()
+
 import sqlite3
 import hashlib
 import pandas as pd
@@ -16,7 +29,6 @@ def init_db():
     conn = sqlite3.connect('purchase_system.db', check_same_thread=False)
     cursor = conn.cursor()
     
-    # جدول المستخدمين
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -26,7 +38,6 @@ def init_db():
         )
     ''')
     
-    # جدول طلبات الشراء
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +53,6 @@ def init_db():
         )
     ''')
     
-    # إنشاء حساب Admin افتراضي (اسم المستخدم: admin ، كلمة المرور: admin123)
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         cursor.execute("INSERT INTO users VALUES ('admin', ?, 'مدير النظام (Admin)', 'معتمد')", (make_hashes('admin123'),))
@@ -55,7 +65,6 @@ init_db()
 def get_db():
     return sqlite3.connect('purchase_system.db', check_same_thread=False)
 
-# --- إعداد واجهة التطبيق ---
 st.set_page_config(page_title="نظام تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
 if 'logged_in' not in st.session_state:
@@ -63,7 +72,6 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.role = ""
 
-# --- شاشة تسجيل الدخول والاشتراك ---
 if not st.session_state.logged_in:
     st.title("📋 نظام تتبع عمليات الشراء والمشتريات")
     st.markdown("---")
@@ -96,7 +104,7 @@ if not st.session_state.logged_in:
                 else:
                     st.error("اسم المستخدم أو كلمة المرور غير صحيحة.")
         
-        st.info("💡 **بيانات المسؤول الافتراضية للتجربة الأولى:**\n* اسم المستخدم: `admin`\n* كلمة المرور: `admin123`")
+        st.info("💡 **بيانات المسؤول الافتراضية:**\n* اسم المستخدم: `admin`\n* كلمة المرور: `admin123`")
 
     elif auth_choice == "إنشاء حساب جديد":
         st.subheader("📝 طلب تسجيل حساب جديد")
@@ -122,7 +130,6 @@ if not st.session_state.logged_in:
                     st.warning("الرجاء تعبئة جميع الحقول المطلوبة.")
 
 else:
-    # --- الواجهة الرئيسية للمستخدمين المعتمدين ---
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"الدور: **{st.session_state.role}**")
@@ -133,7 +140,6 @@ else:
 
     st.sidebar.markdown("---")
     
-    # تحديد الشاشات المتاحة حسب الصلاحيات
     screens = ["الشاشة 1: المستخدم الأول (إنشاء وتتبع الطلبات)"]
     role = st.session_state.role
     
@@ -143,6 +149,7 @@ else:
         screens.append("الشاشة 3: الاعتماد")
     if role == "مدير النظام (Admin)":
         screens.append("الشاشة 4: الإعدادات وإعطاء الصلاحيات")
+        screens.append("الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)")
 
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
@@ -174,9 +181,9 @@ else:
                 else:
                     st.error("الرجاء إدخال اسم البند على الأقل.")
 
-        st.subheader("📋 سجل طلباتك السابقة وتتبع حالاتها")
+        st.subheader("📋 سجل طلباتك السابقة وملاحظات المراجعة والاعتماد")
         conn = get_db()
-        df_my_orders = pd.read_sql_query("SELECT id, item_name, quantity, estimated_cost, status, created_at FROM purchases WHERE requester = ?", conn, params=(st.session_state.username,))
+        df_my_orders = pd.read_sql_query("SELECT id, item_name, quantity, estimated_cost, status, created_at, reviewer_notes, approver_notes FROM purchases WHERE requester = ?", conn, params=(st.session_state.username,))
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
@@ -263,3 +270,37 @@ else:
                     st.rerun()
                 else:
                     st.warning("الرجاء كتابة اسم المستخدم المراد تعديله.")
+
+    # ==================== الشاشة الخامسة ====================
+    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
+        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
+        
+        conn = get_db()
+        all_purchases = pd.read_sql_query("SELECT * FROM purchases", conn)
+        all_users = pd.read_sql_query("SELECT * FROM users", conn)
+        conn.close()
+        
+        # مؤشرات عامة (Metrics)
+        total_orders = len(all_purchases)
+        total_users = len(all_users)
+        approved_orders = len(all_purchases[all_purchases['status'] == 'معتمد نهائياً']) if not all_purchases.empty else 0
+        pending_orders = len(all_purchases[all_purchases['status'].isin(['قيد المراجعة', 'بانتظار الاعتماد'])]) if not all_purchases.empty else 0
+        total_cost = all_purchases['estimated_cost'].sum() if not all_purchases.empty else 0.0
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("إجمالي الطلبات", total_orders)
+        col2.metric("الطلبات المعتمدة", approved_orders)
+        col3.metric("الطلبات المعلقة", pending_orders)
+        col4.metric("إجمالي المستخدمين", total_users)
+        col5.metric("إجمالي التكاليف (ر.س)", f"{total_cost:,.2f}")
+        
+        st.markdown("---")
+        st.subheader("📈 تفاصيل كافة الطلبات في النظام")
+        if not all_purchases.empty:
+            st.dataframe(all_purchases, use_container_width=True)
+        else:
+            st.info("لا توجد بيانات طلبات مسجلة حتى الآن.")
+            
+        st.markdown("---")
+        st.subheader("👥 ملخص المستخدمين وحالاتهم")
+        st.dataframe(all_users, use_container_width=True)
