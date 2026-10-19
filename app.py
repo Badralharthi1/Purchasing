@@ -110,7 +110,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة تصدير إكسل آمنة ومستقرة 100% بدون أخطاء مكتبية ---
+# --- دالة تصدير إكسل آمنة ومستقرة 100% ---
 def to_excel_bytes(df):
     html_content = df.to_html(index=False).encode('utf-8-sig')
     return html_content
@@ -362,59 +362,69 @@ else:
             
             st.markdown("---")
             st.subheader("⚙️ اتخاذ إجراء وتعديل الطلب")
-            req_id = st.number_input("أدخل رقم الطلب المراد مراجعته وتعديله", min_value=1, step=1)
             
-            conn = get_db()
-            c = conn.cursor()
-            c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id,))
-            current_order = c.fetchone()
-            conn.close()
+            # اختيار الطلب عبر قائمة منسدلة
+            order_options = ["--- اختر طلب لمراجعته ---"] + [
+                f"طلب رقم {row['رقم الطلب']} - {row['اسم الصنف']} ({row['المستخدم']})" 
+                for _, row in df_review.iterrows()
+            ]
             
-            if current_order:
-                with st.form("edit_review_form"):
-                    st.write(f"تعديل تفاصيل الطلب رقم: {req_id}")
-                    new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
-                    new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
-                    new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
-                    new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[3] or "")
-                    
-                    review_notes = st.text_input("ملاحظات المراجعة")
-                    action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
-                    
-                    submit_review = st.form_submit_button("حفظ التعديلات وتنفيذ القرار")
-                    
-                    if submit_review:
-                        new_total = new_unit_price * new_quantity
+            selected_option = st.selectbox("اختر الطلب المراد اتخاذ إجراء بشأنه:", order_options)
+            
+            if selected_option != "--- اختر طلب لمراجعته ---":
+                req_id = int(selected_option.split(" - ")[0].replace("طلب رقم ", ""))
+                
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id,))
+                current_order = c.fetchone()
+                conn.close()
+                
+                if current_order:
+                    with st.form("edit_review_form"):
+                        st.write(f"تعديل تفاصيل الطلب رقم: **{req_id}**")
+                        new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
+                        new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
+                        new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
+                        new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[3] or "")
                         
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id,))
-                        old_history = c.fetchone()[0] or ""
+                        review_notes = st.text_input("ملاحظات المراجعة")
+                        action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
                         
-                        has_changed = (
-                            new_item_name != current_order[0] or
-                            new_unit_price != float(current_order[1]) or
-                            new_quantity != int(current_order[2]) or
-                            new_reason != (current_order[3] or "")
-                        )
+                        submit_review = st.form_submit_button("حفظ التعديلات وتنفيذ القرار")
                         
-                        if has_changed:
-                            edit_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المراجع {st.session_state.username}]"
-                            updated_history = (old_history + "\n" + edit_msg).strip()
-                        else:
-                            updated_history = old_history
-                        
-                        new_status = "بانتظار الاعتماد" if action == "تحويل للاعتماد" else "مرفوض في المراجعة"
-                        c.execute('''
-                            UPDATE purchases 
-                            SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
-                                reason = ?, status = ?, reviewer_notes = ?, edit_history = ? 
-                            WHERE id = ?
-                        ''', (new_item_name, new_unit_price, new_quantity, new_total, new_reason, new_status, review_notes, updated_history, req_id))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
-                        st.rerun()
+                        if submit_review:
+                            new_total = new_unit_price * new_quantity
+                            
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id,))
+                            old_history = c.fetchone()[0] or ""
+                            
+                            has_changed = (
+                                new_item_name != current_order[0] or
+                                new_unit_price != float(current_order[1]) or
+                                new_quantity != int(current_order[2]) or
+                                new_reason != (current_order[3] or "")
+                            )
+                            
+                            if has_changed:
+                                edit_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المراجع {st.session_state.username}]"
+                                updated_history = (old_history + "\n" + edit_msg).strip()
+                            else:
+                                updated_history = old_history
+                            
+                            new_status = "بانتظار الاعتماد" if action == "تحويل للاعتماد" else "مرفوض في المراجعة"
+                            c.execute('''
+                                UPDATE purchases 
+                                SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
+                                    reason = ?, status = ?, reviewer_notes = ?, edit_history = ? 
+                                WHERE id = ?
+                            ''', (new_item_name, new_unit_price, new_quantity, new_total, new_reason, new_status, review_notes, updated_history, req_id))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
+                            st.rerun()
 
     # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد":
@@ -491,59 +501,69 @@ else:
             
             st.markdown("---")
             st.subheader("⚙️ تعديل واعتماد الطلب نهائياً")
-            req_id_app = st.number_input("أدخل رقم الطلب للاعتماد النهائي والتعديل", min_value=1, step=1, key="app_req_id")
             
-            conn = get_db()
-            c = conn.cursor()
-            c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id_app,))
-            current_app_order = c.fetchone()
-            conn.close()
+            # اختيار الطلب عبر قائمة منسدلة للاعتماد
+            order_options_app = ["--- اختر طلب للاعتماد ---"] + [
+                f"طلب رقم {row['رقم الطلب']} - {row['اسم الصنف']} ({row['المستخدم']})" 
+                for _, row in df_approve.iterrows()
+            ]
             
-            if current_app_order:
-                with st.form("edit_approve_form"):
-                    st.write(f"تعديل تفاصيل الطلب قبل الاعتماد رقم: {req_id_app}")
-                    app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[0])
-                    app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[1]), min_value=0.0)
-                    app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[2]), min_value=1, step=1)
-                    app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[3] or "")
-                    
-                    approver_notes = st.text_input("ملاحظات الاعتماد النهائي")
-                    final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
-                    
-                    submit_approval = st.form_submit_button("تأكيد التعديل والقرار النهائي")
-                    
-                    if submit_approval:
-                        new_total_app = app_unit_price * app_quantity
+            selected_option_app = st.selectbox("اختر الطلب المراد اعتماده:", order_options_app)
+            
+            if selected_option_app != "--- اختر طلب للاعتماد ---":
+                req_id_app = int(selected_option_app.split(" - ")[0].replace("طلب رقم ", ""))
+                
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id_app,))
+                current_app_order = c.fetchone()
+                conn.close()
+                
+                if current_app_order:
+                    with st.form("edit_approve_form"):
+                        st.write(f"تعديل تفاصيل الطلب قبل الاعتماد رقم: **{req_id_app}**")
+                        app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[0])
+                        app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[1]), min_value=0.0)
+                        app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[2]), min_value=1, step=1)
+                        app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[3] or "")
                         
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id_app,))
-                        old_history_app = c.fetchone()[0] or ""
+                        approver_notes = st.text_input("ملاحظات الاعتماد النهائي")
+                        final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
                         
-                        has_changed_app = (
-                            app_item_name != current_app_order[0] or
-                            app_unit_price != float(current_app_order[1]) or
-                            app_quantity != int(current_app_order[2]) or
-                            app_reason != (current_app_order[3] or "")
-                        )
+                        submit_approval = st.form_submit_button("تأكيد التعديل والقرار النهائي")
                         
-                        if has_changed_app:
-                            edit_msg_app = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
-                            updated_history_app = (old_history_app + "\n" + edit_msg_app).strip()
-                        else:
-                            updated_history_app = old_history_app
-                        
-                        final_status = "معتمد نهائياً" if final_action == "اعتماد نهائي للشراء" else "مرفوض نهائياً"
-                        c.execute('''
-                            UPDATE purchases 
-                            SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
-                                reason = ?, status = ?, approver_notes = ?, edit_history = ? 
-                            WHERE id = ?
-                        ''', (app_item_name, app_unit_price, app_quantity, new_total_app, app_reason, final_status, approver_notes, updated_history_app, req_id_app))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
-                        st.rerun()
+                        if submit_approval:
+                            new_total_app = app_unit_price * app_quantity
+                            
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id_app,))
+                            old_history_app = c.fetchone()[0] or ""
+                            
+                            has_changed_app = (
+                                app_item_name != current_app_order[0] or
+                                app_unit_price != float(current_app_order[1]) or
+                                app_quantity != int(current_app_order[2]) or
+                                app_reason != (current_app_order[3] or "")
+                            )
+                            
+                            if has_changed_app:
+                                edit_msg_app = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
+                                updated_history_app = (old_history_app + "\n" + edit_msg_app).strip()
+                            else:
+                                updated_history_app = old_history_app
+                            
+                            final_status = "معتمد نهائياً" if final_action == "اعتماد نهائي للشراء" else "مرفوض نهائياً"
+                            c.execute('''
+                                UPDATE purchases 
+                                SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
+                                    reason = ?, status = ?, approver_notes = ?, edit_history = ? 
+                                WHERE id = ?
+                            ''', (app_item_name, app_unit_price, app_quantity, new_total_app, app_reason, final_status, approver_notes, updated_history_app, req_id_app))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
+                            st.rerun()
 
     # ==================== الشاشة الرابعة ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
