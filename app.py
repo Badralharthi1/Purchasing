@@ -5,6 +5,15 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
+# --- قائمة المستشفيات المعتمدة ---
+HOSPITALS_LIST = [
+    "مجمع الملك فيصل",
+    "مستشفى الملك عبدالعزيز التخصصي",
+    "مستشفى الأطفال",
+    "مستشفى الصحة النفسية",
+    "الإمداد العام"
+]
+
 # --- إعداد الصفحة والتصميم الأساسي ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
@@ -52,7 +61,8 @@ def init_db():
             username TEXT PRIMARY KEY,
             password TEXT,
             roles TEXT,
-            status TEXT
+            status TEXT,
+            hospital TEXT
         )
     ''')
     
@@ -63,11 +73,14 @@ def init_db():
             cursor.execute("ALTER TABLE users RENAME COLUMN role TO roles")
         else:
             cursor.execute("ALTER TABLE users ADD COLUMN roles TEXT")
+    if 'hospital' not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN hospital TEXT")
             
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             requester TEXT,
+            hospital TEXT,
             item_number TEXT,
             nupco_number TEXT,
             e_market_code TEXT,
@@ -89,6 +102,8 @@ def init_db():
     
     cursor.execute("PRAGMA table_info(purchases)")
     p_columns = [column[1] for column in cursor.fetchall()]
+    if 'hospital' not in p_columns:
+        cursor.execute("ALTER TABLE purchases ADD COLUMN hospital TEXT")
     if 'edit_history' not in p_columns:
         cursor.execute("ALTER TABLE purchases ADD COLUMN edit_history TEXT")
     if 'reviewed_at' not in p_columns:
@@ -99,7 +114,7 @@ def init_db():
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
-        cursor.execute("INSERT INTO users VALUES ('admin', ?, ?, 'معتمد')", (make_hashes('admin123'), admin_roles))
+        cursor.execute("INSERT INTO users VALUES ('admin', ?, ?, 'معتمد', 'مجمع الملك فيصل')", (make_hashes('admin123'), admin_roles))
     
     conn.commit()
     conn.close()
@@ -131,8 +146,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.user_roles = []
+    st.session_state.user_hospital = ""
 
-# تهيئة المفاتيح الخاصة بالنماذج لضمان المزامنة التلقائية
 if 'sb_item_num' not in st.session_state:
     st.session_state.sb_item_num = None
 if 'sb_nupco_num' not in st.session_state:
@@ -140,7 +155,7 @@ if 'sb_nupco_num' not in st.session_state:
 if 'sb_item_name' not in st.session_state:
     st.session_state.sb_item_name = None
 
-# --- دوال الربط والمزامنة التلقائية اللحظية ---
+# --- دوال المزامنة التلقائية ---
 def sync_from_item_num():
     val = st.session_state.sb_item_num
     if val and not catalog_df.empty:
@@ -188,7 +203,7 @@ if not st.session_state.logged_in:
             if submit_login:
                 conn = get_db()
                 c = conn.cursor()
-                c.execute("SELECT password, roles, status FROM users WHERE username = ?", (username,))
+                c.execute("SELECT password, roles, status, hospital FROM users WHERE username = ?", (username,))
                 data = c.fetchone()
                 conn.close()
                 
@@ -197,6 +212,7 @@ if not st.session_state.logged_in:
                         st.session_state.logged_in = True
                         st.session_state.username = username
                         st.session_state.user_roles = data[1].split(",") if data[1] else []
+                        st.session_state.user_hospital = data[3] or "مجمع الملك فيصل"
                         st.success("تم تسجيل الدخول بنجاح!")
                         st.rerun()
                     else:
@@ -209,30 +225,32 @@ if not st.session_state.logged_in:
         with st.form("signup_form"):
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
+            selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
             all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة (اختر ما تحتاجه)", all_available_roles, default=[])
             submit_signup = st.form_submit_button("إرسال طلب التسجيل")
             
             if submit_signup:
-                if new_user and new_pass and requested_roles:
+                if new_user and new_pass and requested_roles and selected_hospital:
                     conn = get_db()
                     c = conn.cursor()
                     try:
                         roles_str = ",".join(requested_roles)
-                        c.execute("INSERT INTO users VALUES (?, ?, ?, 'قيد الانتظار')", 
-                                  (new_user, make_hashes(new_pass), roles_str))
+                        c.execute("INSERT INTO users VALUES (?, ?, ?, 'قيد الانتظار', ?)", 
+                                  (new_user, make_hashes(new_pass), roles_str, selected_hospital))
                         conn.commit()
                         st.success("✅ تم إرسال طلبك بنجاح! ينتظر اعتماد الأدمن.")
                     except sqlite3.IntegrityError:
                         st.error("❌ اسم المستخدم مستخدم مسبقاً.")
                     conn.close()
                 else:
-                    st.warning("الرجاء تعبئة جميع الحقول واختيار صلاحية واحدة على الأقل.")
+                    st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى وصلاحية واحدة على الأقل.")
 
 # ==================== الواجهة الرئيسية بعد تسجيل الدخول ====================
 else:
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
+    st.sidebar.write(f"المستشفى: **{st.session_state.user_hospital}**")
     st.sidebar.write(f"الصلاحيات: **{', '.join(st.session_state.user_roles)}**")
     
     with st.sidebar.expander("🔒 تغيير كلمة المرور"):
@@ -264,6 +282,7 @@ else:
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.user_roles = []
+        st.session_state.user_hospital = ""
         st.rerun()
 
     st.sidebar.markdown("---")
@@ -274,9 +293,9 @@ else:
     if "رفع طلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)")
     if "مراجعة الطلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 2: المراجعة")
+        screens.append("الشاشة 2: المراجعة (مستقلة لكل مستشفى)")
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 3: الاعتماد")
+        screens.append("الشاشة 3: الاعتماد (موحدة لجميع المستشفيات)")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 4: الإعدادات وإعطاء الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
@@ -291,9 +310,9 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (المزامنة اللحظية والبحث المباشر) ====================
+    # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
-        st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
+        st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
         list_items = sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
         list_nupco = sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
@@ -361,20 +380,19 @@ else:
                 c = conn.cursor()
                 c.execute('''
                     INSERT INTO purchases (
-                        requester, item_number, nupco_number, e_market_code, 
+                        requester, hospital, item_number, nupco_number, e_market_code, 
                         item_name, unit_price, quantity, total_cost, 
                         importance_criteria, reason, status, created_at, reviewed_at, approved_at, edit_history
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
                 ''', (
-                    st.session_state.username, str_item_num, str_nupco_num, e_market_code.strip(), 
+                    st.session_state.username, st.session_state.user_hospital, str_item_num, str_nupco_num, e_market_code.strip(), 
                     str_item_name, unit_price, quantity, total_cost, 
                     importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
                 ))
                 conn.commit()
                 conn.close()
                 
-                # إعادة تعيين مفاتيح الجلسة لتفريغ الخانات
                 st.session_state.sb_item_num = None
                 st.session_state.sb_nupco_num = None
                 st.session_state.sb_item_name = None
@@ -386,7 +404,7 @@ else:
         st.subheader("📋 سجل طلباتك السابقة ومواعيد الاعتماد")
         conn = get_db()
         df_my_orders = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", item_number AS "رقم البند", nupco_number AS "رقم نوبكو", 
+            SELECT id AS "رقم الطلب", hospital AS "المستشفى", item_number AS "رقم البند", nupco_number AS "رقم نوبكو", 
                    e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", 
                    unit_price AS "السعر الأفرادي", quantity AS "الكمية", total_cost AS "الإجمالي", 
                    importance_criteria AS "معيار الأهمية", reason AS "السبب", status AS "الحالة", 
@@ -398,31 +416,37 @@ else:
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية ====================
-    elif selected_screen == "الشاشة 2: المراجعة":
-        st.header("🔍 الشاشة الثانية: مراجعة الطلبات وتعديلها أو دمجها")
+    # ==================== الشاشة الثانية (مراجعة مستقلة لكل مستشفى) ====================
+    elif selected_screen == "الشاشة 2: المراجعة (مستقلة لكل مستشفى)":
+        review_hospital = st.session_state.user_hospital
+        
+        # إذا كان المدير يريد التبديل بين المستشفيات
+        if "مدير النظام (Admin)" in st.session_state.user_roles:
+            review_hospital = st.selectbox("اختيار مستشفى للمراجعة (خاص بالأدمن):", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0)
+
+        st.header(f"🔍 الشاشة الثانية: مراجعة الطلبات ({review_hospital})")
         
         conn = get_db()
         df_review = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
                    item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", quantity AS "الكمية", 
                    total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", reason AS "السبب", 
                    created_at AS "تاريخ الإنشاء", edit_history AS "سجل التعديلات" 
-            FROM purchases WHERE status = 'قيد المراجعة'
-        ''', conn)
+            FROM purchases WHERE status = 'قيد المراجعة' AND hospital = ?
+        ''', conn, params=(review_hospital,))
         
         df_all_system = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", item_name AS "اسم الصنف", 
                    quantity AS "الكمية", total_cost AS "الإجمالي", status AS "الحالة", 
                    created_at AS "تاريخ الإنشاء" 
-            FROM purchases
-        ''', conn)
+            FROM purchases WHERE hospital = ?
+        ''', conn, params=(review_hospital,))
         conn.close()
         
         if df_review.empty:
-            st.info("لا توجد طلبات جديدة بانتظار المراجعة حالياً.")
+            st.info(f"لا توجد طلبات جديدة بانتظار المراجعة لـ ({review_hospital}) حالياً.")
         else:
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة (انقر على السطر لاختياره)")
             nupco_list_filter = [n for n in df_review["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
@@ -474,7 +498,7 @@ else:
                 selected_nupco_val = str(target_df.iloc[selected_index]["رقم نوبكو"])
                 
                 st.markdown("---")
-                st.subheader(f"🔍 السجل التاريخي للطلبات السابقة لرقم نوبكو: `{selected_nupco_val}` (بدون الطلب الحالي)")
+                st.subheader(f"🔍 السجل التاريخي للطلبات السابقة لرقم نوبكو: `{selected_nupco_val}` في ({review_hospital}) (بدون الطلب الحالي)")
                 if not df_all_system.empty and selected_nupco_val.strip() != "":
                     matched_history_df = df_all_system[
                         (df_all_system["رقم نوبكو"] == selected_nupco_val) & 
@@ -556,13 +580,13 @@ else:
                             st.success(f"تم تحديث وتعديل وتسجيل وقت مراجعة الطلب رقم {req_id} بنجاح!")
                             st.rerun()
 
-    # ==================== الشاشة الثالثة ====================
-    elif selected_screen == "الشاشة 3: الاعتماد":
-        st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير البيانات")
+    # ==================== الشاشة الثالثة (اعتماد موحد لجميع المستشفيات) ====================
+    elif selected_screen == "الشاشة 3: الاعتماد (موحدة لجميع المستشفيات)":
+        st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير البيانات (شاشة موحدة)")
         
         conn = get_db()
         df_approve = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", 
                    quantity AS "الكمية", total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", 
                    reason AS "السبب", reviewed_at AS "تاريخ ووقت المراجعة", reviewer_notes AS "ملاحظات المراجعة", edit_history AS "سجل التعديلات" 
@@ -570,7 +594,7 @@ else:
         ''', conn)
         
         df_all_approved = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
                    item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", quantity AS "الكمية", 
                    total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", reason AS "السبب", 
@@ -580,7 +604,7 @@ else:
         ''', conn)
         
         df_all_system_app = pd.read_sql_query('''
-            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", item_name AS "اسم الصنف", 
                    quantity AS "الكمية", total_cost AS "الإجمالي", status AS "الحالة", 
                    created_at AS "تاريخ الإنشاء" 
@@ -591,23 +615,30 @@ else:
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel متوافق (.xls)",
+                label="📥 تصدير الطلبات المعتمدة نهائياً لجميع المستشفيات إلى ملف Excel متوافق (.xls)",
                 data=excel_bytes,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                file_name=f"approved_purchases_all_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
                 mime="application/vnd.ms-excel"
             )
             st.markdown("---")
         
         if df_approve.empty:
-            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
+            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً لكل المستشفيات.")
         else:
-            st.subheader("📦 الطلبات المعلقة للاعتماد النهائي (انقر على السطر لاختياره)")
-            nupco_list_app = [n for n in df_approve["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
-            nupco_filter_app = st.selectbox("تصفية ودمج حسب رقم نوبكو للاعتماد", ["الكل"] + nupco_list_app)
+            filter_col1, filter_col2 = st.columns(2)
+            with filter_col1:
+                hosp_app_filter = st.selectbox("تصفية حسب المستشفى للاعتماد", ["جميع المستشفيات"] + HOSPITALS_LIST)
             
             target_app_df = df_approve
+            if hosp_app_filter != "جميع المستشفيات":
+                target_app_df = target_app_df[target_app_df["المستشفى"] == hosp_app_filter]
+
+            with filter_col2:
+                nupco_list_app = [n for n in target_app_df["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
+                nupco_filter_app = st.selectbox("تصفية ودمج حسب رقم نوبكو للاعتماد", ["الكل"] + nupco_list_app)
+            
             if nupco_filter_app != "الكل":
-                target_app_df = df_approve[df_approve["رقم نوبكو"] == nupco_filter_app]
+                target_app_df = target_app_df[target_app_df["رقم نوبكو"] == nupco_filter_app]
                 st.info(f"يوجد {len(target_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app}")
                 
                 if len(target_app_df) > 1:
@@ -739,32 +770,35 @@ else:
         
         conn = get_db()
         c = conn.cursor()
-        c.execute("SELECT username, roles, status FROM users")
+        c.execute("SELECT username, roles, status, hospital FROM users")
         all_users_data = c.fetchall()
         conn.close()
         
         st.subheader("📋 جدول المستخدمين الحاليين")
         
         if all_users_data:
-            header_col1, header_col2, header_col3, header_col4 = st.columns([2, 3, 2, 1])
+            header_col1, header_col2, header_col3, header_col4, header_col5 = st.columns([2, 2, 3, 2, 1])
             header_col1.markdown("**اسم المستخدم**")
-            header_col2.markdown("**الصلاحيات**")
-            header_col3.markdown("**الحالة**")
-            header_col4.markdown("**إجراء الحذف**")
+            header_col2.markdown("**المستشفى**")
+            header_col3.markdown("**الصلاحيات**")
+            header_col4.markdown("**الحالة**")
+            header_col5.markdown("**حذف**")
             st.markdown("---")
             
             for u in all_users_data:
                 u_name = u[0]
                 u_roles = u[1]
                 u_status = u[2]
+                u_hosp = u[3] or "مجمع الملك فيصل"
                 
-                row_col1, row_col2, row_col3, row_col4 = st.columns([2, 3, 2, 1])
+                row_col1, row_col2, row_col3, row_col4, row_col5 = st.columns([2, 2, 3, 2, 1])
                 row_col1.write(u_name)
-                row_col2.write(u_roles)
-                row_col3.write(u_status)
+                row_col2.write(u_hosp)
+                row_col3.write(u_roles)
+                row_col4.write(u_status)
                 
-                with row_col4:
-                    if st.button("🗑️ حذف", key=f"table_del_{u_name}", type="secondary"):
+                with row_col5:
+                    if st.button("🗑️", key=f"table_del_{u_name}", type="secondary"):
                         if u_name == "admin":
                             st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
                         elif u_name == st.session_state.username:
@@ -781,7 +815,7 @@ else:
         else:
             st.info("لا توجد حسابات مستخدمين مسجلة.")
         
-        st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
+        st.subheader("👤 تعديل صلاحيات ومستشفى وحالة مستخدم مباشرة")
         
         usernames_list = [u[0] for u in all_users_data]
         selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
@@ -790,9 +824,12 @@ else:
             user_current_data = next((u for u in all_users_data if u[0] == selected_target_user), None)
             current_roles_list = user_current_data[1].split(",") if user_current_data[1] else []
             current_status = user_current_data[2]
+            current_hosp = user_current_data[3] or "مجمع الملك فيصل"
             
             with st.form("direct_user_edit_form"):
                 st.write(f"تعديل صلاحيات وحالة المستخدم: **{selected_target_user}**")
+                
+                updated_hosp = st.selectbox("تعديل المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(current_hosp) if current_hosp in HOSPITALS_LIST else 0)
                 
                 all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
                 updated_roles = st.multiselect(
@@ -812,22 +849,27 @@ else:
                         roles_string = ",".join(updated_roles)
                         conn = get_db()
                         c = conn.cursor()
-                        c.execute("UPDATE users SET roles = ?, status = ? WHERE username = ?", (roles_string, updated_status, selected_target_user))
+                        c.execute("UPDATE users SET roles = ?, status = ?, hospital = ? WHERE username = ?", (roles_string, updated_status, updated_hosp, selected_target_user))
                         conn.commit()
                         conn.close()
-                        st.success(f"تم تحديث صلاحيات وحالة المستخدم ({selected_target_user}) بنجاح!")
+                        st.success(f"تم تحديث صلاحيات ومستشفى المستخدم ({selected_target_user}) بنجاح!")
                         st.rerun()
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
 
     # ==================== الشاشة الخامسة ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
+        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
         
         conn = get_db()
         df_all = pd.read_sql_query("SELECT * FROM purchases", conn)
-        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
+        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', hospital AS 'المستشفى', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
         conn.close()
+        
+        dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
+        
+        if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
+            df_all = df_all[df_all['hospital'] == dash_hosp_filter]
         
         df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
         df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
@@ -876,15 +918,6 @@ else:
             st.dataframe(df_final_approved, use_container_width=True)
         else:
             st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
-            
-        st.markdown("---")
-        
-        st.subheader("❌ تفاصيل الطلبات المرفوضة (سواء في المراجعة أو نهائياً)")
-        df_all_rejected = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
-        if not df_all_rejected.empty:
-            st.dataframe(df_all_rejected, use_container_width=True)
-        else:
-            st.info("لا توجد طلبات مرفوضة حتى الآن.")
             
         st.markdown("---")
         
