@@ -373,7 +373,7 @@ else:
                 
                 conn = get_db()
                 c = conn.cursor()
-                c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id,))
+                c.execute("SELECT item_number, nupco_number, e_market_code, item_name, unit_price, quantity, importance_criteria, reason FROM purchases WHERE id = ?", (req_id,))
                 current_order = c.fetchone()
                 conn.close()
                 
@@ -381,10 +381,20 @@ else:
                     st.markdown("---")
                     st.subheader(f"⚙️ اتخاذ إجراء وتعديل الطلب رقم: {req_id}")
                     with st.form("edit_review_form"):
-                        new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
-                        new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
-                        new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
-                        new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[3] or "")
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            new_item_number = st.text_input("رقم البند", value=current_order[0])
+                            new_nupco_number = st.text_input("رقم نوبكو", value=current_order[1])
+                            new_e_market_code = st.text_input("كود السوق الإلكتروني", value=current_order[2])
+                        with c2:
+                            new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[3])
+                            new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[4]), min_value=0.0)
+                            new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[5]), min_value=1, step=1)
+                        with c3:
+                            importance_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            curr_importance = current_order[6] if current_order[6] in importance_options else "متوسط"
+                            new_importance = st.selectbox("معيار الأهمية", importance_options, index=importance_options.index(curr_importance))
+                            new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[7] or "")
                         
                         review_notes = st.text_input("ملاحظات المراجعة")
                         action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
@@ -400,10 +410,14 @@ else:
                             old_history = c.fetchone()[0] or ""
                             
                             has_changed = (
-                                new_item_name != current_order[0] or
-                                new_unit_price != float(current_order[1]) or
-                                new_quantity != int(current_order[2]) or
-                                new_reason != (current_order[3] or "")
+                                new_item_number != current_order[0] or
+                                new_nupco_number != current_order[1] or
+                                new_e_market_code != current_order[2] or
+                                new_item_name != current_order[3] or
+                                new_unit_price != float(current_order[4]) or
+                                new_quantity != int(current_order[5]) or
+                                new_importance != current_order[6] or
+                                new_reason != (current_order[7] or "")
                             )
                             
                             if has_changed:
@@ -415,10 +429,13 @@ else:
                             new_status = "بانتظار الاعتماد" if action == "تحويل للاعتماد" else "مرفوض في المراجعة"
                             c.execute('''
                                 UPDATE purchases 
-                                SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
+                                SET item_number = ?, nupco_number = ?, e_market_code = ?, item_name = ?, 
+                                    unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
                                     reason = ?, status = ?, reviewer_notes = ?, edit_history = ? 
                                 WHERE id = ?
-                            ''', (new_item_name, new_unit_price, new_quantity, new_total, new_reason, new_status, review_notes, updated_history, req_id))
+                            ''', (new_item_number, new_nupco_number, new_e_market_code, new_item_name, 
+                                  new_unit_price, new_quantity, new_total, new_importance, 
+                                  new_reason, new_status, review_notes, updated_history, req_id))
                             conn.commit()
                             conn.close()
                             st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
@@ -431,7 +448,7 @@ else:
         conn = get_db()
         df_approve = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
-                   nupco_number AS "رقم نوبكو", item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", 
+                   nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", 
                    quantity AS "الكمية", total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", 
                    reason AS "السبب", reviewer_notes AS "ملاحظات المراجعة", edit_history AS "سجل التعديلات" 
             FROM purchases WHERE status = 'بانتظار الاعتماد'
@@ -510,7 +527,7 @@ else:
                 
                 conn = get_db()
                 c = conn.cursor()
-                c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id_app,))
+                c.execute("SELECT item_number, nupco_number, e_market_code, item_name, unit_price, quantity, importance_criteria, reason FROM purchases WHERE id = ?", (req_id_app,))
                 current_app_order = c.fetchone()
                 conn.close()
                 
@@ -518,10 +535,20 @@ else:
                     st.markdown("---")
                     st.subheader(f"⚙️ تعديل واعتماد الطلب نهائياً رقم: {req_id_app}")
                     with st.form("edit_approve_form"):
-                        app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[0])
-                        app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[1]), min_value=0.0)
-                        app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[2]), min_value=1, step=1)
-                        app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[3] or "")
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            app_item_number = st.text_input("رقم البند", value=current_app_order[0])
+                            app_nupco_number = st.text_input("رقم نوبكو", value=current_app_order[1])
+                            app_e_market_code = st.text_input("كود السوق الإلكتروني", value=current_app_order[2])
+                        with c2:
+                            app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[3])
+                            app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[4]), min_value=0.0)
+                            app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[5]), min_value=1, step=1)
+                        with c3:
+                            importance_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            curr_importance = current_app_order[6] if current_app_order[6] in importance_options else "متوسط"
+                            app_importance = st.selectbox("معيار الأهمية", importance_options, index=importance_options.index(curr_importance))
+                            app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[7] or "")
                         
                         approver_notes = st.text_input("ملاحظات الاعتماد النهائي")
                         final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
@@ -537,10 +564,14 @@ else:
                             old_history_app = c.fetchone()[0] or ""
                             
                             has_changed_app = (
-                                app_item_name != current_app_order[0] or
-                                app_unit_price != float(current_app_order[1]) or
-                                app_quantity != int(current_app_order[2]) or
-                                app_reason != (current_app_order[3] or "")
+                                app_item_number != current_app_order[0] or
+                                app_nupco_number != current_app_order[1] or
+                                app_e_market_code != current_app_order[2] or
+                                app_item_name != current_app_order[3] or
+                                app_unit_price != float(current_app_order[4]) or
+                                app_quantity != int(current_app_order[5]) or
+                                app_importance != current_app_order[6] or
+                                app_reason != (current_app_order[7] or "")
                             )
                             
                             if has_changed_app:
@@ -552,10 +583,13 @@ else:
                             final_status = "معتمد نهائياً" if final_action == "اعتماد نهائي للشراء" else "مرفوض نهائياً"
                             c.execute('''
                                 UPDATE purchases 
-                                SET item_name = ?, unit_price = ?, quantity = ?, total_cost = ?, 
+                                SET item_number = ?, nupco_number = ?, e_market_code = ?, item_name = ?, 
+                                    unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
                                     reason = ?, status = ?, approver_notes = ?, edit_history = ? 
                                 WHERE id = ?
-                            ''', (app_item_name, app_unit_price, app_quantity, new_total_app, app_reason, final_status, approver_notes, updated_history_app, req_id_app))
+                            ''', (app_item_number, app_nupco_number, app_e_market_code, app_item_name, 
+                                  app_unit_price, app_quantity, new_total_app, app_importance, 
+                                  app_reason, final_status, approver_notes, updated_history_app, req_id_app))
                             conn.commit()
                             conn.close()
                             st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
