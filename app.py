@@ -314,7 +314,6 @@ else:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # 1. البحث والتعيين المباشر برقم البند
             idx_item = items_list.index(st.session_state.sel_item_num) if st.session_state.sel_item_num in items_list else 0
             selected_item_num = st.selectbox(
                 "1. رقم البند *",
@@ -324,7 +323,6 @@ else:
                 on_change=on_change_item_num
             )
             
-            # 2. البحث والتعيين المباشر برقم نوبكو
             idx_nupco = nupco_list.index(st.session_state.sel_nupco) if st.session_state.sel_nupco in nupco_list else 0
             selected_nupco = st.selectbox(
                 "2. رقم نوبكو *",
@@ -337,7 +335,6 @@ else:
             e_market_code = st.text_input("3. كود السوق الالكتروني *", value=st.session_state.input_e_market, key="k_e_market")
 
         with col2:
-            # 4. البحث والتعيين المباشر باسم الصنف
             idx_name = names_list.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in names_list else 0
             selected_item_name = st.selectbox(
                 "4. اسم الصنف *",
@@ -630,4 +627,67 @@ else:
                         st.rerun()
 
             event_app = st.dataframe(
-                target_app_df,
+                target_app_df, 
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            
+            selected_app_rows = event_app.selection.rows if hasattr(event_app, "selection") else []
+            
+            if selected_app_rows:
+                selected_app_index = selected_app_rows[0]
+                req_id_app = int(target_app_df.iloc[selected_app_index]["رقم الطلب"])
+                
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("SELECT item_number, nupco_number, e_market_code, item_name, unit_price, quantity, importance_criteria, reason FROM purchases WHERE id = ?", (req_id_app,))
+                current_app_order = c.fetchone()
+                conn.close()
+                
+                if current_app_order:
+                    st.markdown("---")
+                    st.subheader(f"⚙️ تعديل واعتماد الطلب نهائياً رقم: {req_id_app}")
+                    with st.form("edit_approve_form"):
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            app_item_number = st.text_input("رقم البند", value=current_app_order[0])
+                            app_nupco_number = st.text_input("رقم نوبكو", value=current_app_order[1])
+                            app_e_market_code = st.text_input("كود السوق الإلكتروني", value=current_app_order[2])
+                        with c2:
+                            app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[3])
+                            app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[4]), min_value=0.0)
+                            app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[5]), min_value=1, step=1)
+                        with c3:
+                            importance_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            curr_importance = current_app_order[6] if current_app_order[6] in importance_options else "متوسط"
+                            app_importance = st.selectbox("معيار الأهمية", importance_options, index=importance_options.index(curr_importance))
+                            app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[7] or "")
+                        
+                        approver_notes = st.text_input("ملاحظات الاعتماد النهائي")
+                        final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
+                        
+                        submit_approval = st.form_submit_button("تأكيد التعديل والقرار النهائي")
+                        
+                        if submit_approval:
+                            new_total_app = app_unit_price * app_quantity
+                            now_str_app = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id_app,))
+                            old_history_app = c.fetchone()[0] or ""
+                            
+                            has_changed_app = (
+                                app_item_number != current_app_order[0] or
+                                app_nupco_number != current_app_order[1] or
+                                app_e_market_code != current_app_order[2] or
+                                app_item_name != current_app_order[3] or
+                                app_unit_price != float(current_app_order[4]) or
+                                app_quantity != int(current_app_order[5]) or
+                                app_importance != current_app_order[6] or
+                                app_reason != (current_app_order[7] or "")
+                            )
+                            
+                            if has_changed_app:
+                                edit_msg_app = f
