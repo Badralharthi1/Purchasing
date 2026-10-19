@@ -1,17 +1,4 @@
 import sys
-import subprocess
-import io
-
-# تثبيت المكتبات تلقائياً إذا لم تكن موجودة (بما فيها openpyxl لتصدير الإكسل)
-def install_packages():
-    for package in ["streamlit", "pandas", "openpyxl"]:
-        try:
-            __import__(package)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-install_packages()
-
 import sqlite3
 import hashlib
 import pandas as pd
@@ -102,7 +89,7 @@ if not st.session_state.logged_in:
                 conn.close()
                 
                 if data and check_hashes(password, data[0]):
-                    if data[3] == "معتمد":
+                    if data[2] == "معتمد":
                         st.session_state.logged_in = True
                         st.session_state.username = username
                         st.session_state.user_roles = data[1].split(",") if data[1] else []
@@ -304,7 +291,7 @@ else:
 
     # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد":
-        st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير الإكسل")
+        st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير البيانات")
         
         conn = get_db()
         df_approve = pd.read_sql_query('''
@@ -326,16 +313,12 @@ else:
         conn.close()
         
         if not df_all_approved.empty:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_all_approved.to_excel(writer, index=False, sheet_name='الطلبات المعتمدة')
-            excel_data = output.getvalue()
-            
+            csv_data = df_all_approved.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel",
-                data=excel_data,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف CSV (إكسل)",
+                data=csv_data,
+                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv"
             )
             st.markdown("---")
         
@@ -343,7 +326,7 @@ else:
             st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
         else:
             st.subheader("📦 الطلبات المعلقة للاعتماد النهائي")
-            nupco_filter_app = st.selectbox("تصفية أو دمج حسب رقم نوبكو للاعتماد", ["الكل"] + list(df_approve["nupco_number"].dropna().unique()))
+            nupco_filter_app = st.selectbox("تصفية أو دمج حسب رقم نوبكو للاعتماد", ["الكل"] + list(df_approve["رقم نوبكو"].dropna().unique()))
             if nupco_filter_app != "الكل":
                 filtered_app_df = df_approve[df_approve["رقم نوبكو"] == nupco_filter_app]
                 st.info(f"يوجد {len(filtered_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app}")
