@@ -132,14 +132,13 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# تهيئة حقول البحث والإدخال في نفس الخانة
-if 'k_item_number' not in st.session_state:
-    st.session_state.k_item_number = ""
-if 'k_nupco_number' not in st.session_state:
-    st.session_state.k_nupco_number = ""
-if 'k_item_name' not in st.session_state:
-    st.session_state.k_item_name = ""
-
+# متغيّرات وسيطة للنموذج لتفادي أخطاء الـ Key Re-assignment
+if 'input_item_number' not in st.session_state:
+    st.session_state.input_item_number = ""
+if 'input_nupco_number' not in st.session_state:
+    st.session_state.input_nupco_number = ""
+if 'input_item_name' not in st.session_state:
+    st.session_state.input_item_name = ""
 if 'input_e_market' not in st.session_state:
     st.session_state.input_e_market = ""
 if 'input_unit_price' not in st.session_state:
@@ -149,33 +148,36 @@ if 'input_quantity' not in st.session_state:
 if 'input_reason' not in st.session_state:
     st.session_state.input_reason = ""
 
-# --- دوال الربط التلقائي عند اختيار عنصر من القائمة ---
-def on_change_item_num():
-    val = st.session_state.k_item_number
-    if val and not catalog_df.empty:
+# --- دوال البحث التلقائي عند الاختيار ---
+def update_from_item_num():
+    val = st.session_state.get('sel_item_num_key', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         matched = catalog_df[catalog_df['رقم البند'] == val]
         if not matched.empty:
             row = matched.iloc[0]
-            st.session_state.k_nupco_number = str(row['رقم نوبكو'])
-            st.session_state.k_item_name = str(row['اسم الصنف'])
+            st.session_state.input_item_number = str(row['رقم البند'])
+            st.session_state.input_nupco_number = str(row['رقم نوبكو'])
+            st.session_state.input_item_name = str(row['اسم الصنف'])
 
-def on_change_nupco():
-    val = st.session_state.k_nupco_number
-    if val and not catalog_df.empty:
+def update_from_nupco():
+    val = st.session_state.get('sel_nupco_key', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         matched = catalog_df[catalog_df['رقم نوبكو'] == val]
         if not matched.empty:
             row = matched.iloc[0]
-            st.session_state.k_item_number = str(row['رقم البند'])
-            st.session_state.k_item_name = str(row['اسم الصنف'])
+            st.session_state.input_item_number = str(row['رقم البند'])
+            st.session_state.input_nupco_number = str(row['رقم نوبكو'])
+            st.session_state.input_item_name = str(row['اسم الصنف'])
 
-def on_change_item_name():
-    val = st.session_state.k_item_name
-    if val and not catalog_df.empty:
+def update_from_name():
+    val = st.session_state.get('sel_name_key', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         matched = catalog_df[catalog_df['اسم الصنف'] == val]
         if not matched.empty:
             row = matched.iloc[0]
-            st.session_state.k_item_number = str(row['رقم البند'])
-            st.session_state.k_nupco_number = str(row['رقم نوبكو'])
+            st.session_state.input_item_number = str(row['رقم البند'])
+            st.session_state.input_nupco_number = str(row['رقم نوبكو'])
+            st.session_state.input_item_name = str(row['اسم الصنف'])
 
 # --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
@@ -303,71 +305,43 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (البحث والإدخال المباشر في نفس الخانة) ====================
+    # ==================== الشاشة الأولى (البحث المباشر + الكتابة اليدوية مع التفريغ التلقائي) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
-        # تجهيز الخيارات من الإكسل
-        items_options = sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
-        nupco_options = sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
-        names_options = sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
+        items_options = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
+        nupco_options = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
+        names_options = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
 
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # 1. رقم البند (بحث أو إدخال يدوي مباشر بنفس الخانة)
-            item_number = st.selectbox(
-                "1. رقم البند (ابحث أو اكتب يدوياً) *",
-                options=items_options,
-                index=items_options.index(st.session_state.k_item_number) if st.session_state.k_item_number in items_options else None,
-                key="k_item_number",
-                on_change=on_change_item_num,
-                accept_new_options=True
-            )
-            if item_number is None:
-                item_number = ""
+            st.selectbox("البحث عن رقم البند في القائمة المرجعية:", items_options, key="sel_item_num_key", on_change=update_from_item_num)
+            item_number = st.text_input("1. رقم البند (أو اكتبه يدوياً) *", value=st.session_state.input_item_number)
 
-            # 2. رقم نوبكو (بحث أو إدخال يدوي مباشر بنفس الخانة)
-            nupco_number = st.selectbox(
-                "2. رقم نوبكو (ابحث أو اكتب يدوياً) *",
-                options=nupco_options,
-                index=nupco_options.index(st.session_state.k_nupco_number) if st.session_state.k_nupco_number in nupco_options else None,
-                key="k_nupco_number",
-                on_change=on_change_nupco,
-                accept_new_options=True
-            )
-            if nupco_number is None:
-                nupco_number = ""
+            st.selectbox("البحث عن رقم نوبكو في القائمة المرجعية:", nupco_options, key="sel_nupco_key", on_change=update_from_nupco)
+            nupco_number = st.text_input("2. رقم نوبكو (أو اكتبه يدوياً) *", value=st.session_state.input_nupco_number)
 
-            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=st.session_state.input_e_market, key="k_e_market")
+            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=st.session_state.input_e_market)
 
         with col2:
-            # 4. اسم الصنف (بحث أو إدخال يدوي مباشر بنفس الخانة)
-            item_name = st.selectbox(
-                "4. اسم الصنف (ابحث أو اكتب يدوياً) *",
-                options=names_options,
-                index=names_options.index(st.session_state.k_item_name) if st.session_state.k_item_name in names_options else None,
-                key="k_item_name",
-                on_change=on_change_item_name,
-                accept_new_options=True
-            )
-            if item_name is None:
-                item_name = ""
+            st.selectbox("البحث عن اسم الصنف في القائمة المرجعية:", names_options, key="sel_name_key", on_change=update_from_name)
+            item_name = st.text_input("4. اسم الصنف (أو اكتبه يدوياً) *", value=st.session_state.input_item_name)
 
-            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=st.session_state.input_unit_price, key="k_unit_price")
-            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=st.session_state.input_quantity, key="k_quantity")
+            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=float(st.session_state.input_unit_price))
+            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=int(st.session_state.input_quantity))
 
         with col3:
             importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-            reason = st.text_area("8. السبب / المبررات (اختياري)", value=st.session_state.input_reason, key="k_reason")
+            reason = st.text_area("8. السبب / المبررات (اختياري)", value=st.session_state.input_reason)
 
         total_cost = unit_price * quantity
         st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
 
         if st.button("إرسال الطلب", use_container_width=True):
-            fin_item_num = str(item_number).strip()
-            fin_nupco_num = str(nupco_number).strip()
-            fin_item_name = str(item_name).strip()
+            fin_item_num = item_number.strip()
+            fin_nupco_num = nupco_number.strip()
+            fin_item_name = item_name.strip()
 
             if not fin_item_num:
                 st.error("❌ حقل 'رقم البند' إلزامي.")
@@ -399,10 +373,10 @@ else:
                 conn.commit()
                 conn.close()
                 
-                # تفريغ جميع الخانات بالكامل بعد الإرسال
-                st.session_state.k_item_number = ""
-                st.session_state.k_nupco_number = ""
-                st.session_state.k_item_name = ""
+                # تفريغ جميع الخانات بالكامل وبطريقة آمنة
+                st.session_state.input_item_number = ""
+                st.session_state.input_nupco_number = ""
+                st.session_state.input_item_name = ""
                 st.session_state.input_e_market = ""
                 st.session_state.input_unit_price = 0.0
                 st.session_state.input_quantity = 1
@@ -441,7 +415,6 @@ else:
             FROM purchases WHERE status = 'قيد المراجعة'
         ''', conn)
         
-        # جلب جميع الطلبات للمقارنة التاريخية
         df_all_system = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", item_name AS "اسم الصنف", 
@@ -503,7 +476,7 @@ else:
                 req_id = int(target_df.iloc[selected_index]["رقم الطلب"])
                 selected_nupco_val = str(target_df.iloc[selected_index]["رقم نوبكو"])
                 
-                # --- السجل التاريخي باستثناء البند الحالي ---
+                # السجل التاريخي للبند بدون الطلب الحالي
                 st.markdown("---")
                 st.subheader(f"🔍 السجل التاريخي للطلبات السابقة لرقم نوبكو: `{selected_nupco_val}` (بدون الطلب الحالي)")
                 if not df_all_system.empty and selected_nupco_val.strip() != "":
@@ -681,7 +654,6 @@ else:
                 req_id_app = int(target_app_df.iloc[selected_app_index]["رقم الطلب"])
                 selected_nupco_app_val = str(target_app_df.iloc[selected_app_index]["رقم نوبكو"])
                 
-                # --- السجل التاريخي للاعتماد باستثناء الطلب الحالي ---
                 st.markdown("---")
                 st.subheader(f"🔍 السجل التاريخي للطلبات السابقة لرقم نوبكو: `{selected_nupco_app_val}` (بدون الطلب الحالي)")
                 if not df_all_system_app.empty and selected_nupco_app_val.strip() != "":
@@ -757,168 +729,4 @@ else:
                                     unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
                                     reason = ?, status = ?, approved_at = ?, approver_notes = ?, edit_history = ? 
                                 WHERE id = ?
-                            ''', (app_item_number, app_nupco_number, app_e_market_code, app_item_name, 
-                                  app_unit_price, app_quantity, new_total_app, app_importance, 
-                                  app_reason, final_status, now_str_app, approver_notes, updated_history_app, req_id_app))
-                            conn.commit()
-                            conn.close()
-                            st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
-                            st.rerun()
-
-    # ==================== الشاشة الرابعة ====================
-    elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
-        st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
-        
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT username, roles, status FROM users")
-        all_users_data = c.fetchall()
-        conn.close()
-        
-        st.subheader("📋 جدول المستخدمين الحاليين")
-        
-        if all_users_data:
-            header_col1, header_col2, header_col3, header_col4 = st.columns([2, 3, 2, 1])
-            header_col1.markdown("**اسم المستخدم**")
-            header_col2.markdown("**الصلاحيات**")
-            header_col3.markdown("**الحالة**")
-            header_col4.markdown("**إجراء الحذف**")
-            st.markdown("---")
-            
-            for u in all_users_data:
-                u_name = u[0]
-                u_roles = u[1]
-                u_status = u[2]
-                
-                row_col1, row_col2, row_col3, row_col4 = st.columns([2, 3, 2, 1])
-                row_col1.write(u_name)
-                row_col2.write(u_roles)
-                row_col3.write(u_status)
-                
-                with row_col4:
-                    if st.button("🗑️ حذف", key=f"table_del_{u_name}", type="secondary"):
-                        if u_name == "admin":
-                            st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
-                        elif u_name == st.session_state.username:
-                            st.error("❌ لا يمكنك حذف حسابك الحالي.")
-                        else:
-                            conn = get_db()
-                            c = conn.cursor()
-                            c.execute("DELETE FROM users WHERE username = ?", (u_name,))
-                            conn.commit()
-                            conn.close()
-                            st.success(f"✅ تم حذف المستخدم ({u_name}) بنجاح!")
-                            st.rerun()
-                st.markdown("---")
-        else:
-            st.info("لا توجد حسابات مستخدمين مسجلة.")
-        
-        st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
-        
-        usernames_list = [u[0] for u in all_users_data]
-        selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
-        
-        if selected_target_user:
-            user_current_data = next((u for u in all_users_data if u[0] == selected_target_user), None)
-            current_roles_list = user_current_data[1].split(",") if user_current_data[1] else []
-            current_status = user_current_data[2]
-            
-            with st.form("direct_user_edit_form"):
-                st.write(f"تعديل صلاحيات وحالة المستخدم: **{selected_target_user}**")
-                
-                all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
-                updated_roles = st.multiselect(
-                    "تعديل الصلاحيات (تعدد الصلاحيات)", 
-                    all_roles_options,
-                    default=[r for r in current_roles_list if r in all_roles_options]
-                )
-                
-                status_options = ["معتمد", "قيد الانتظار", "موقوف"]
-                status_index = status_options.index(current_status) if current_status in status_options else 0
-                updated_status = st.selectbox("حالة الحساب", status_options, index=status_index)
-                
-                submit_user_edit = st.form_submit_button("حفظ التعديلات فوراً")
-                
-                if submit_user_edit:
-                    if updated_roles:
-                        roles_string = ",".join(updated_roles)
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute("UPDATE users SET roles = ?, status = ? WHERE username = ?", (roles_string, updated_status, selected_target_user))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"تم تحديث صلاحيات وحالة المستخدم ({selected_target_user}) بنجاح!")
-                        st.rerun()
-                    else:
-                        st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
-
-    # ==================== الشاشة الخامسة ====================
-    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
-        
-        conn = get_db()
-        df_all = pd.read_sql_query("SELECT * FROM purchases", conn)
-        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
-        conn.close()
-        
-        df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
-        df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
-        df_review_rejected = df_all[df_all['status'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
-        
-        df_final_approved = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
-        df_final_rejected = df_all[df_all['status'] == 'مرفوض نهائياً'] if not df_all.empty else pd.DataFrame()
-        
-        st.subheader("📌 إحصائيات مرحلة المراجعة")
-        rc1, rc2, rc3 = st.columns(3)
-        rc1.metric("🔍 طلبات قيد المراجعة (معلقة)", len(df_review_pending))
-        rc2.metric("✅ طلبات معتمدة بالمراجعة (تم تحويلها)", len(df_review_approved))
-        rc3.metric("❌ طلبات مرفوضة في المراجعة", len(df_review_rejected))
-        
-        st.markdown("---")
-        
-        st.subheader("📌 إحصائيات مرحلة الاعتماد النهائي")
-        fc1, fc2, fc3 = st.columns(3)
-        fc1.metric("⏳ طلبات بانتظار الاعتماد النهائي", len(df_all[df_all['status'] == 'بانتظار الاعتماد']) if not df_all.empty else 0)
-        fc2.metric("✅ طلبات معتمدة نهائياً", len(df_final_approved))
-        fc3.metric("🚫 طلبات مرفوضة نهائياً", len(df_final_rejected))
-        
-        st.markdown("---")
-        
-        st.subheader("🔍 تفاصيل مرحلة: قيد المراجعة (المعلقة)")
-        if not df_review_pending.empty:
-            st.dataframe(df_review_pending, use_container_width=True)
-        else:
-            st.info("لا توجد طلبات معلقة قيد المراجعة.")
-            
-        st.markdown("---")
-        
-        st.subheader("⏳ تفاصيل مرحلة: بانتظار الاعتماد النهائي")
-        df_wait = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
-        if not df_wait.empty:
-            st.dataframe(df_wait, use_container_width=True)
-        else:
-            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
-            
-        st.markdown("---")
-        
-        st.subheader("✅ تفاصيل مرحلة: الطلبات المعتمدة نهائياً")
-        if not df_final_approved.empty:
-            total_approved_cost = df_final_approved['total_cost'].sum()
-            st.metric("💰 إجمالي تكلفة الطلبات المعتمدة نهائياً", f"{total_approved_cost:,.2f} ر.س")
-            st.dataframe(df_final_approved, use_container_width=True)
-        else:
-            st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
-            
-        st.markdown("---")
-        
-        st.subheader("❌ تفاصيل الطلبات المرفوضة (سواء في المراجعة أو نهائياً)")
-        df_all_rejected = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
-        if not df_all_rejected.empty:
-            st.dataframe(df_all_rejected, use_container_width=True)
-        else:
-            st.info("لا توجد طلبات مرفوضة حتى الآن.")
-            
-        st.markdown("---")
-        
-        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
-        st.dataframe(users_df, use_container_width=True)
+                            ''', (app_item
