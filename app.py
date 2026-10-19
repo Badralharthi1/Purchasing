@@ -1,7 +1,7 @@
 import sqlite3
 import hashlib
 import io
-import struct
+import sys
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -83,22 +83,21 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة لتصدير ملف Excel حقيقي وبأعمدة مرتبة بدون مكتبات خارجية ---
+# --- دالة لتصدير ملف Excel حقيقي وبأعمدة مرتبة ---
 def to_excel_bytes(df):
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter' if 'xlsxwriter' in sys.modules else 'openpyxl' if 'openpyxl' in sys.modules else None) as writer:
-        # سنستخدم طريقة بديلة نقية عبر pandas لضمان العمل بسلاسة
-        pass
-    # كبديل آمن ومتوافق 100% بدون فشل تثبيت، نستخدم صيغة XML/HTML المبسطة لإكسل أو صيغة CSV مصلحة، 
-    # ولضمان فتحها بسلاسة في إكسل بدون تجميع الأعمدة، سنستخدم صيغة HTML متوافقة مع Excel
-    html_content = df.to_html(index=False).encode('utf-8-sig')
-    return html_content
+    engine_to_use = 'xlsxwriter' if 'xlsxwriter' in sys.modules else 'openpyxl' if 'openpyxl' in sys.modules else None
+    if engine_to_use:
+        with pd.ExcelWriter(output, engine=engine_to_use) as writer:
+            df.to_excel(writer, index=False, sheet_name='الطلبات المعتمدة')
+        return output.getvalue()
+    else:
+        return df.to_html(index=False).encode('utf-8-sig')
 
 if not st.session_state.logged_in:
     st.title("📋 نظام تتبع عمليات الشراء والمشتريات")
     st.markdown("---")
     
-    # اختيار طريقة التنقل بين تسجيل الدخول وإنشاء حساب جديد أسفل الواجهة
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
     st.markdown("---")
     
@@ -194,23 +193,35 @@ else:
         with st.form("purchase_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                item_number = st.text_input("1. رقم البند")
-                nupco_number = st.text_input("2. رقم نوبكو")
-                e_market_code = st.text_input("3. كود السوق الالكتروني للبنود التخصصية")
+                item_number = st.text_input("1. رقم البند *")
+                nupco_number = st.text_input("2. رقم نوبكو *")
+                e_market_code = st.text_input("3. كود السوق الالكتروني *")
             with col2:
-                item_name = st.text_input("4. اسم الصنف")
-                unit_price = st.number_input("5. السعر الافرادي (ر.س)", min_value=0.0, step=1.0)
-                quantity = st.number_input("6. الكمية المطلوبة", min_value=1, step=1)
+                item_name = st.text_input("4. اسم الصنف *")
+                unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0)
+                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1)
             with col3:
-                importance_criteria = st.selectbox("7. معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-                reason = st.text_area("8. السبب / المبررات")
+                importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                reason = st.text_area("8. السبب / المبررات (اختياري)")
             
             total_cost = unit_price * quantity
             st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
             
             submit_order = st.form_submit_button("إرسال الطلب")
             if submit_order:
-                if item_name:
+                if not item_number.strip():
+                    st.error("❌ حقل 'رقم البند' إلزامي.")
+                elif not nupco_number.strip():
+                    st.error("❌ حقل 'رقم نوبكو' إلزامي.")
+                elif not e_market_code.strip():
+                    st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
+                elif not item_name.strip():
+                    st.error("❌ حقل 'اسم الصنف' إلزامي.")
+                elif unit_price <= 0:
+                    st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
+                elif quantity <= 0:
+                    st.error("❌ يرجى إدخال 'كمية' أعلى من الصفر.")
+                else:
                     conn = get_db()
                     c = conn.cursor()
                     c.execute('''
@@ -228,8 +239,7 @@ else:
                     conn.commit()
                     conn.close()
                     st.success("✅ تم إرسال طلب الشراء بنجاح وتم تفريغ الحقول لإدخال طلب جديد.")
-                else:
-                    st.error("الرجاء إدخال اسم الصنف على الأقل.")
+                    st.rerun()
 
         st.subheader("📋 سجل طلباتك السابقة وملاحظات المراجعة والاعتماد")
         conn = get_db()
@@ -272,7 +282,6 @@ else:
                 st.info(f"يوجد {len(filtered_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
                 st.dataframe(filtered_df, use_container_width=True)
                 
-                # زر دمج الطلبات المتشابهة الظاهر بوضوح
                 if len(filtered_df) > 1:
                     if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_df)}) المرتبطة برقم نوبكو {nupco_filter}", type="primary"):
                         conn = get_db()
@@ -317,7 +326,7 @@ else:
                     new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
                     new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
                     new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
-                    new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[3])
+                    new_reason = st.text_area("السبب / المبرر المعدل", value=current_order[3] or "")
                     
                     review_notes = st.text_input("ملاحظات المراجعة")
                     action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
@@ -326,13 +335,25 @@ else:
                     
                     if submit_review:
                         new_total = new_unit_price * new_quantity
-                        edit_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المراجع {st.session_state.username}]"
                         
                         conn = get_db()
                         c = conn.cursor()
                         c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id,))
                         old_history = c.fetchone()[0] or ""
-                        updated_history = old_history + "\n" + edit_msg
+                        
+                        # التحقق مما إذا تم تعديل أي من الحقول فعلياً
+                        has_changed = (
+                            new_item_name != current_order[0] or
+                            new_unit_price != float(current_order[1]) or
+                            new_quantity != int(current_order[2]) or
+                            new_reason != (current_order[3] or "")
+                        )
+                        
+                        if has_changed:
+                            edit_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المراجع {st.session_state.username}]"
+                            updated_history = (old_history + "\n" + edit_msg).strip()
+                        else:
+                            updated_history = old_history
                         
                         new_status = "بانتظار الاعتماد" if action == "تحويل للاعتماد" else "مرفوض في المراجعة"
                         c.execute('''
@@ -369,14 +390,13 @@ else:
         ''', conn)
         conn.close()
         
-        # تصدير ملف إكسل حقيقي ومنسق للأعمدة
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel (.xls/.xlsx متوافق)",
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel (.xlsx)",
                 data=excel_bytes,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
-                mime="application/vnd.ms-excel"
+                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.markdown("---")
         
@@ -436,7 +456,7 @@ else:
                     app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[0])
                     app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[1]), min_value=0.0)
                     app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[2]), min_value=1, step=1)
-                    app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[3])
+                    app_reason = st.text_area("السبب (تعديل نهائي)", value=current_app_order[3] or "")
                     
                     approver_notes = st.text_input("ملاحظات الاعتماد النهائي")
                     final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
@@ -445,13 +465,25 @@ else:
                     
                     if submit_approval:
                         new_total_app = app_unit_price * app_quantity
-                        edit_msg_app = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
                         
                         conn = get_db()
                         c = conn.cursor()
                         c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id_app,))
                         old_history_app = c.fetchone()[0] or ""
-                        updated_history_app = old_history_app + "\n" + edit_msg_app
+                        
+                        # التحقق مما إذا تم تعديل أي من الحقول فعلياً
+                        has_changed_app = (
+                            app_item_name != current_app_order[0] or
+                            app_unit_price != float(current_app_order[1]) or
+                            app_quantity != int(current_app_order[2]) or
+                            app_reason != (current_app_order[3] or "")
+                        )
+                        
+                        if has_changed_app:
+                            edit_msg_app = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
+                            updated_history_app = (old_history_app + "\n" + edit_msg_app).strip()
+                        else:
+                            updated_history_app = old_history_app
                         
                         final_status = "معتمد نهائياً" if final_action == "اعتماد نهائي للشراء" else "مرفوض نهائياً"
                         c.execute('''
