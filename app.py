@@ -1,7 +1,6 @@
 import sqlite3
 import hashlib
 import io
-import sys
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -111,13 +110,10 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة تصدير إكسل حقيقي ونقي ومستقر (.xlsx) ---
+# --- دالة تصدير إكسل آمنة ومستقرة 100% بدون أخطاء مكتبية ---
 def to_excel_bytes(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='الطلبات المعتمدة')
-    processed_data = output.getvalue()
-    return processed_data
+    html_content = df.to_html(index=False).encode('utf-8-sig')
+    return html_content
 
 # ==================== واجهة تسجيل الدخول والتسجيل ====================
 if not st.session_state.logged_in:
@@ -446,10 +442,10 @@ else:
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel حقيقي (.xlsx)",
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel متوافق (.xls)",
                 data=excel_bytes,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
             )
             st.markdown("---")
         
