@@ -32,9 +32,18 @@ st.markdown("""
         margin-bottom: 25px;
     }
     
-    .stButton>button {
+    /* تخصيص لون زر إرسال الطلب ليصبح أخضر مميز */
+    div.stButton > button:first-child {
+        background-color: #28a745;
+        color: white;
         border-radius: 8px;
         font-weight: bold;
+        border: none;
+    }
+    
+    div.stButton > button:first-child:hover {
+        background-color: #218838;
+        color: white;
     }
     
     [data-testid="stMetricValue"] {
@@ -148,7 +157,6 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-# عداد المفاتيح لضمان إعادة تنشيط المزامنة الحقيقية في Streamlit
 if 'form_counter' not in st.session_state:
     st.session_state.form_counter = 0
 
@@ -193,7 +201,6 @@ def sync_name_changed():
             st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
             st.session_state.form_counter += 1
 
-# --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
     html_content = df.to_html(index=False).encode('utf-8-sig')
     return html_content
@@ -308,9 +315,9 @@ else:
     if "مراجعة الطلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 2: المراجعة (مستقلة لكل مستشفى)")
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 3: الاعتماد (موحدة لجميع المستشفيات)")
+        screens.append("الشاشة 3: الاعتماد النهائي")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 4: الإعدادات وإعطاء الصلاحيات")
+        screens.append("الشاشة 4: إدارة الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)")
 
@@ -323,7 +330,7 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (المزامنة اللحظية الحقيقية) ====================
+    # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
@@ -331,7 +338,6 @@ else:
         list_nupco = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
         list_names = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
 
-        # استخراج الفهرس الحالي لربط الواجهة بقيمة Session State الحالية
         idx_item = list_items.index(st.session_state.sel_item_num) if st.session_state.sel_item_num in list_items else 0
         idx_nupco = list_nupco.index(st.session_state.sel_nupco_num) if st.session_state.sel_nupco_num in list_nupco else 0
         idx_name = list_names.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in list_names else 0
@@ -413,7 +419,6 @@ else:
                 conn.commit()
                 conn.close()
                 
-                # تفريغ الخانات وتجديد العداد
                 st.session_state.sel_item_num = "-- اختر أو ابحث --"
                 st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
                 st.session_state.sel_item_name = "-- اختر أو ابحث --"
@@ -423,7 +428,7 @@ else:
                 st.rerun()
 
         st.markdown("---")
-        st.subheader("📋 سجل طلباتك السابقة ومواعيد الاعتماد")
+        st.subheader("📋 سجل طلباتك السابقة")
         conn = get_db()
         df_my_orders = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", hospital AS "المستشفى", item_number AS "رقم البند", nupco_number AS "رقم نوبكو", 
@@ -438,7 +443,7 @@ else:
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية (مراجعة مستقلة لكل مستشفى) ====================
+    # ==================== الشاشة الثانية ====================
     elif selected_screen == "الشاشة 2: المراجعة (مستقلة لكل مستشفى)":
         review_hospital = st.session_state.user_hospital
         
@@ -601,9 +606,9 @@ else:
                             st.success(f"تم تحديث وتعديل وتسجيل وقت مراجعة الطلب رقم {req_id} بنجاح!")
                             st.rerun()
 
-    # ==================== الشاشة الثالثة (اعتماد موحد لجميع المستشفيات) ====================
-    elif selected_screen == "الشاشة 3: الاعتماد (موحدة لجميع المستشفيات)":
-        st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير البيانات (شاشة موحدة)")
+    # ==================== الشاشة الثالثة (الاعتماد النهائي) ====================
+    elif selected_screen == "الشاشة 3: الاعتماد النهائي":
+        st.header("✅ الشاشة الثالثة: الاعتماد النهائي")
         
         conn = get_db()
         df_approve = pd.read_sql_query('''
@@ -636,7 +641,7 @@ else:
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً لجميع المستشفيات إلى ملف Excel متوافق (.xls)",
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel متوافق (.xls)",
                 data=excel_bytes,
                 file_name=f"approved_purchases_all_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
                 mime="application/vnd.ms-excel"
@@ -644,7 +649,7 @@ else:
             st.markdown("---")
         
         if df_approve.empty:
-            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً لكل المستشفيات.")
+            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
         else:
             filter_col1, filter_col2 = st.columns(2)
             with filter_col1:
@@ -785,9 +790,9 @@ else:
                             st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
-    # ==================== الشاشة الرابعة ====================
-    elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
-        st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
+    # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
+    elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
+        st.header("⚙️ الشاشة الرابعة: إدارة الصلاحيات")
         
         conn = get_db()
         c = conn.cursor()
