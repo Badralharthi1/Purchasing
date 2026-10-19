@@ -132,38 +132,38 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# تهيئة القيم للبحث والربط
-if 'val_item_num' not in st.session_state:
-    st.session_state.val_item_num = None
-if 'val_nupco_num' not in st.session_state:
-    st.session_state.val_nupco_num = None
-if 'val_item_name' not in st.session_state:
-    st.session_state.val_item_name = None
+# تهيئة المفاتيح الخاصة بالنماذج لضمان المزامنة التلقائية
+if 'sb_item_num' not in st.session_state:
+    st.session_state.sb_item_num = None
+if 'sb_nupco_num' not in st.session_state:
+    st.session_state.sb_nupco_num = None
+if 'sb_item_name' not in st.session_state:
+    st.session_state.sb_item_name = None
 
-# --- دوال البحث المباشر والربط التلقائي ---
-def on_change_item_num():
-    v = st.session_state.sb_item_num
-    if v and not catalog_df.empty:
-        m = catalog_df[catalog_df['رقم البند'] == str(v).strip()]
+# --- دوال الربط والمزامنة التلقائية اللحظية ---
+def sync_from_item_num():
+    val = st.session_state.sb_item_num
+    if val and not catalog_df.empty:
+        m = catalog_df[catalog_df['رقم البند'] == str(val).strip()]
         if not m.empty:
-            st.session_state.val_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.val_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.sb_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.sb_item_name = str(m.iloc[0]['اسم الصنف'])
 
-def on_change_nupco():
-    v = st.session_state.sb_nupco_num
-    if v and not catalog_df.empty:
-        m = catalog_df[catalog_df['رقم نوبكو'] == str(v).strip()]
+def sync_from_nupco():
+    val = st.session_state.sb_nupco_num
+    if val and not catalog_df.empty:
+        m = catalog_df[catalog_df['رقم نوبكو'] == str(val).strip()]
         if not m.empty:
-            st.session_state.val_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.val_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.sb_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.sb_item_name = str(m.iloc[0]['اسم الصنف'])
 
-def on_change_item_name():
-    v = st.session_state.sb_item_name
-    if v and not catalog_df.empty:
-        m = catalog_df[catalog_df['اسم الصنف'] == str(v).strip()]
+def sync_from_item_name():
+    val = st.session_state.sb_item_name
+    if val and not catalog_df.empty:
+        m = catalog_df[catalog_df['اسم الصنف'] == str(val).strip()]
         if not m.empty:
-            st.session_state.val_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.val_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.sb_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.sb_nupco_num = str(m.iloc[0]['رقم نوبكو'])
 
 # --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
@@ -291,11 +291,10 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (البحث في الخانة المباشرة مع قبول القيم الجديدة) ====================
+    # ==================== الشاشة الأولى (المزامنة اللحظية والبحث المباشر) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
-        # تحضير قوائم الخيارات من ملف الإكسل
         list_items = sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
         list_nupco = sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
         list_names = sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
@@ -303,36 +302,30 @@ else:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # 1. رقم البند (ابحث أو اكتب مباشرة)
             item_num_val = st.selectbox(
                 "1. رقم البند (ابحث أو اكتب يدوياً) *",
                 options=list_items,
-                index=list_items.index(st.session_state.val_item_num) if st.session_state.val_item_num in list_items else None,
                 key="sb_item_num",
-                on_change=on_change_item_num,
+                on_change=sync_from_item_num,
                 accept_new_options=True
             )
             
-            # 2. رقم نوبكو (ابحث أو اكتب مباشرة)
             nupco_num_val = st.selectbox(
                 "2. رقم نوبكو (ابحث أو اكتب يدوياً) *",
                 options=list_nupco,
-                index=list_nupco.index(st.session_state.val_nupco_num) if st.session_state.val_nupco_num in list_nupco else None,
                 key="sb_nupco_num",
-                on_change=on_change_nupco,
+                on_change=sync_from_nupco,
                 accept_new_options=True
             )
             
             e_market_code = st.text_input("3. كود السوق الالكتروني *", key="input_e_market")
 
         with col2:
-            # 4. اسم الصنف (ابحث أو اكتب مباشرة)
             item_name_val = st.selectbox(
                 "4. اسم الصنف (ابحث أو اكتب يدوياً) *",
                 options=list_names,
-                index=list_names.index(st.session_state.val_item_name) if st.session_state.val_item_name in list_names else None,
                 key="sb_item_name",
-                on_change=on_change_item_name,
+                on_change=sync_from_item_name,
                 accept_new_options=True
             )
             
@@ -381,10 +374,10 @@ else:
                 conn.commit()
                 conn.close()
                 
-                # تفريغ قيم الجلسة بعد الإرسال
-                st.session_state.val_item_num = None
-                st.session_state.val_nupco_num = None
-                st.session_state.val_item_name = None
+                # إعادة تعيين مفاتيح الجلسة لتفريغ الخانات
+                st.session_state.sb_item_num = None
+                st.session_state.sb_nupco_num = None
+                st.session_state.sb_item_name = None
                 
                 st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ الخانات لتقديم طلب جديد!")
                 st.rerun()
@@ -405,7 +398,7 @@ else:
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية (استثناء البند الحالي من جدول السجل) ====================
+    # ==================== الشاشة الثانية ====================
     elif selected_screen == "الشاشة 2: المراجعة":
         st.header("🔍 الشاشة الثانية: مراجعة الطلبات وتعديلها أو دمجها")
         
