@@ -5,11 +5,16 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# --- إعداد الصفحة والتصميم الأساسي ---
+# --- إعداد الصفحة والتصميم الأساسي (مع تكبير الخطوط الفرعية والنصوص) ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
 st.markdown("""
     <style>
+    /* تكبير الخطوط الفرعية والنصوص العامة */
+    html, body, [class*="css"] {
+        font-size: 1.15rem; /* زيادة حجم الخط الفرعي والنصي */
+    }
+    
     .main-title {
         text-align: center;
         color: #0073e6;
@@ -612,7 +617,6 @@ else:
         
         st.subheader("📋 جدول المستخدمين الحاليين")
         
-        # إنشاء جدول منسق لعرض المستخدمين مع زر الحذف أمام كل مستخدم
         if all_users_data:
             header_col1, header_col2, header_col3, header_col4 = st.columns([2, 3, 2, 1])
             header_col1.markdown("**اسم المستخدم**")
