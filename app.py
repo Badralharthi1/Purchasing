@@ -323,22 +323,22 @@ else:
         if df_review.empty:
             st.info("لا توجد طلبات جديدة بانتظار المراجعة حالياً.")
         else:
-            st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
+            st.subheader("📦 قائمة الطلبات المعلقة للمراجعة (انقر على السطر لاختياره)")
             nupco_list = [n for n in df_review["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list)
             
+            target_df = df_review
             if nupco_filter != "الكل":
-                filtered_df = df_review[df_review["رقم نوبكو"] == nupco_filter]
-                st.info(f"يوجد {len(filtered_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
-                st.dataframe(filtered_df, use_container_width=True)
+                target_df = df_review[df_review["رقم نوبكو"] == nupco_filter]
+                st.info(f"يوجد {len(target_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
                 
-                if len(filtered_df) > 1:
-                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_df)}) المرتبطة برقم نوبكو {nupco_filter}", type="primary"):
+                if len(target_df) > 1:
+                    if st.button(f"🔀 دمج الطلبات الـ ({len(target_df)}) المرتبطة برقم نوبكو {nupco_filter}", type="primary"):
                         conn = get_db()
                         c = conn.cursor()
-                        ids = filtered_df["رقم الطلب"].tolist()
-                        total_qty = filtered_df["الكمية"].sum()
-                        first_price = filtered_df["السعر الأفرادي"].iloc[0]
+                        ids = target_df["رقم الطلب"].tolist()
+                        total_qty = target_df["الكمية"].sum()
+                        first_price = target_df["السعر الأفرادي"].iloc[0]
                         total_cost_merged = total_qty * first_price
                         merged_ids_str = ", ".join(map(str, ids))
                         
@@ -357,22 +357,23 @@ else:
                         conn.close()
                         st.success(f"تم دمج الطلبات بنجاح في الطلب رقم {primary_id}!")
                         st.rerun()
-            else:
-                st.dataframe(df_review, use_container_width=True)
+
+            # عرض الجدول مع خاصية النقر المباشر لاختيار الطلب
+            event = st.dataframe(
+                target_df, 
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            
+            selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             st.markdown("---")
             st.subheader("⚙️ اتخاذ إجراء وتعديل الطلب")
             
-            # اختيار الطلب عبر قائمة منسدلة
-            order_options = ["--- اختر طلب لمراجعته ---"] + [
-                f"طلب رقم {row['رقم الطلب']} - {row['اسم الصنف']} ({row['المستخدم']})" 
-                for _, row in df_review.iterrows()
-            ]
-            
-            selected_option = st.selectbox("اختر الطلب المراد اتخاذ إجراء بشأنه:", order_options)
-            
-            if selected_option != "--- اختر طلب لمراجعته ---":
-                req_id = int(selected_option.split(" - ")[0].replace("طلب رقم ", ""))
+            if selected_rows:
+                selected_index = selected_rows[0]
+                req_id = int(target_df.iloc[selected_index]["رقم الطلب"])
                 
                 conn = get_db()
                 c = conn.cursor()
@@ -382,7 +383,7 @@ else:
                 
                 if current_order:
                     with st.form("edit_review_form"):
-                        st.write(f"تعديل تفاصيل الطلب رقم: **{req_id}**")
+                        st.write(f"تعديل تفاصيل الطلب المSelected رقم: **{req_id}**")
                         new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
                         new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
                         new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
@@ -425,6 +426,8 @@ else:
                             conn.close()
                             st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
                             st.rerun()
+            else:
+                st.info("👈 اضغط على أي سطر في الجدول أعلاه لعرض تفاصيله هنا ولاتخاذ الإجراء والتعديل.")
 
     # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد":
@@ -462,22 +465,22 @@ else:
         if df_approve.empty:
             st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
         else:
-            st.subheader("📦 الطلبات المعلقة للاعتماد النهائي")
+            st.subheader("📦 الطلبات المعلقة للاعتماد النهائي (انقر على السطر لاختياره)")
             nupco_list_app = [n for n in df_approve["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
             nupco_filter_app = st.selectbox("تصفية ودمج حسب رقم نوبكو للاعتماد", ["الكل"] + nupco_list_app)
             
+            target_app_df = df_approve
             if nupco_filter_app != "الكل":
-                filtered_app_df = df_approve[df_approve["رقم نوبكو"] == nupco_filter_app]
-                st.info(f"يوجد {len(filtered_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app}")
-                st.dataframe(filtered_app_df, use_container_width=True)
+                target_app_df = df_approve[df_approve["رقم نوبكو"] == nupco_filter_app]
+                st.info(f"يوجد {len(target_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app}")
                 
-                if len(filtered_app_df) > 1:
-                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_app_df)}) في الاعتماد", type="primary"):
+                if len(target_app_df) > 1:
+                    if st.button(f"🔀 دمج الطلبات الـ ({len(target_app_df)}) في الاعتماد", type="primary"):
                         conn = get_db()
                         c = conn.cursor()
-                        ids = filtered_app_df["رقم الطلب"].tolist()
-                        total_qty = filtered_app_df["الكمية"].sum()
-                        first_price = filtered_app_df["السعر الأفرادي"].iloc[0]
+                        ids = target_app_df["رقم الطلب"].tolist()
+                        total_qty = target_app_df["الكمية"].sum()
+                        first_price = target_app_df["السعر الأفرادي"].iloc[0]
                         total_cost_merged = total_qty * first_price
                         merged_ids_str = ", ".join(map(str, ids))
                         
@@ -496,22 +499,22 @@ else:
                         conn.close()
                         st.success(f"تم دمج الطلبات بنجاح في الطلب رقم {primary_id}!")
                         st.rerun()
-            else:
-                st.dataframe(df_approve, use_container_width=True)
+
+            event_app = st.dataframe(
+                target_app_df, 
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            
+            selected_app_rows = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             st.markdown("---")
             st.subheader("⚙️ تعديل واعتماد الطلب نهائياً")
             
-            # اختيار الطلب عبر قائمة منسدلة للاعتماد
-            order_options_app = ["--- اختر طلب للاعتماد ---"] + [
-                f"طلب رقم {row['رقم الطلب']} - {row['اسم الصنف']} ({row['المستخدم']})" 
-                for _, row in df_approve.iterrows()
-            ]
-            
-            selected_option_app = st.selectbox("اختر الطلب المراد اعتماده:", order_options_app)
-            
-            if selected_option_app != "--- اختر طلب للاعتماد ---":
-                req_id_app = int(selected_option_app.split(" - ")[0].replace("طلب رقم ", ""))
+            if selected_app_rows:
+                selected_app_index = selected_app_rows[0]
+                req_id_app = int(target_app_df.iloc[selected_app_index]["رقم الطلب"])
                 
                 conn = get_db()
                 c = conn.cursor()
@@ -564,6 +567,8 @@ else:
                             conn.close()
                             st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
                             st.rerun()
+            else:
+                st.info("👈 اضغط على أي سطر في الجدول أعلاه لعرض تفاصيله هنا ولاتخاذ القرار والاعتماد.")
 
     # ==================== الشاشة الرابعة ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
@@ -611,73 +616,4 @@ else:
                 
                 if submit_user_edit:
                     if updated_roles:
-                        roles_string = ",".join(updated_roles)
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute("UPDATE users SET roles = ?, status = ? WHERE username = ?", (roles_string, updated_status, selected_target_user))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"تم تحديث صلاحيات وحالة المستخدم ({selected_target_user}) بنجاح!")
-                        st.rerun()
-                    else:
-                        st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
-
-    # ==================== الشاشة الخامسة ====================
-    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
-        
-        conn = get_db()
-        all_purchases = pd.read_sql_query("SELECT * FROM purchases", conn)
-        all_users = pd.read_sql_query("SELECT * FROM users", conn)
-        conn.close()
-        
-        total_uploaded = len(all_purchases)
-        rejected_in_review = len(all_purchases[all_purchases['status'] == 'مرفوض في المراجعة']) if not all_purchases.empty else 0
-        review_approved = len(all_purchases[all_purchases['status'] == 'بانتظار الاعتماد']) if not all_purchases.empty else 0
-        finally_approved = len(all_purchases[all_purchases['status'] == 'معتمد نهائياً']) if not all_purchases.empty else 0
-        finally_rejected = len(all_purchases[all_purchases['status'] == 'مرفوض نهائياً']) if not all_purchases.empty else 0
-        total_cost = all_purchases['total_cost'].sum() if not all_purchases.empty else 0.0
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("📦 إجمالي الطلبات المرفوعة", total_uploaded)
-        col2.metric("🔍 مراجعة بالاعتماد (معلقة)", review_approved)
-        col3.metric("❌ المراجعة بالرفض", rejected_in_review)
-        
-        col4, col5, col6 = st.columns(3)
-        col4.metric("✅ المعتمدة نهائياً", finally_approved)
-        col5.metric("🚫 المرفوضة نهائياً", finally_rejected)
-        col6.metric("💰 إجمالي التكاليف (ر.س)", f"{total_cost:,.2f}")
-        
-        st.markdown("---")
-        st.subheader("📈 جدول تفاصيل كافة الطلبات في النظام")
-        if not all_purchases.empty:
-            display_purchases = all_purchases.rename(columns={
-                'id': 'رقم الطلب',
-                'requester': 'المستخدم',
-                'item_number': 'رقم البند',
-                'nupco_number': 'رقم نوبكو',
-                'e_market_code': 'كود السوق الإلكتروني',
-                'item_name': 'اسم الصنف',
-                'unit_price': 'السعر الأفرادي',
-                'quantity': 'الكمية',
-                'total_cost': 'الإجمالي',
-                'importance_criteria': 'معيار الأهمية',
-                'reason': 'السبب',
-                'status': 'الحالة',
-                'created_at': 'تاريخ الطلب',
-                'reviewer_notes': 'ملاحظات المراجعة',
-                'approver_notes': 'ملاحظات الاعتماد',
-                'edit_history': 'سجل التعديلات'
-            })
-            st.dataframe(display_purchases, use_container_width=True)
-        else:
-            st.info("لا توجد بيانات طلبات مسجلة حتى الآن.")
-            
-        st.markdown("---")
-        st.subheader("👥 ملخص المستخدمين وحالاتهم وصلاحياتهم")
-        display_users = all_users.rename(columns={
-            'username': 'اسم المستخدم',
-            'roles': 'الصلاحيات',
-            'status': 'الحالة'
-        })[['اسم المستخدم', 'الصلاحيات', 'الحالة']]
-        st.dataframe(display_users, use_container_width=True)
+                        roles_
