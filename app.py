@@ -125,11 +125,18 @@ if 'input_item_name' not in st.session_state:
 
 catalog_df = pd.DataFrame()
 
+# دالة قراءة مرنة تدعم فتح الملف بـ openpyxl أو محرك بديل
+def read_excel_file(file_input):
+    try:
+        return pd.read_excel(file_input, engine='openpyxl')
+    except Exception:
+        return pd.read_excel(file_input)
+
 # محاولة تحميل الملف تلقائياً إذا وجد في المجلد
 default_file = "استهلاك كل قسم على حدا.xlsx"
 if os.path.exists(default_file):
     try:
-        df_temp = pd.read_excel(default_file)
+        df_temp = read_excel_file(default_file)
         df_temp['رقم نوبكو'] = df_temp['رقم نوبكو'].astype(str).str.strip()
         df_temp['اسم الصنف'] = df_temp['اسم الصنف'].astype(str).str.strip()
         df_temp['رقم البند'] = df_temp['رقم البند'].fillna('').astype(str).str.strip()
@@ -277,11 +284,14 @@ else:
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
-        # خيار لرفع الملف مباشرة من الواجهة في حال لم يكن موجوداً على السيرفر
-        uploaded_file = st.file_uploader("📁 قم برفع ملف الأصناف (استهلاك كل قسم على حدا.xlsx):", type=["xlsx", "xls"])
+        uploaded_file = st.file_uploader("📁 قم برفع ملف الأصناف (استهلاك كل قسم على حدا.xlsx):", type=["xlsx", "xls", "csv"])
         if uploaded_file is not None:
             try:
-                df_temp = pd.read_excel(uploaded_file)
+                if uploaded_file.name.endswith('.csv'):
+                    df_temp = pd.read_csv(uploaded_file)
+                else:
+                    df_temp = read_excel_file(uploaded_file)
+                    
                 df_temp['رقم نوبكو'] = df_temp['رقم نوبكو'].astype(str).str.strip()
                 df_temp['اسم الصنف'] = df_temp['اسم الصنف'].astype(str).str.strip()
                 df_temp['رقم البند'] = df_temp['رقم البند'].fillna('').astype(str).str.strip()
@@ -289,7 +299,7 @@ else:
                 catalog_df = df_temp
                 st.success("✅ تم تحميل ملف الأصناف بنجاح!")
             except Exception as e:
-                st.error(f"خطأ في قراءة الملف المرفوع: {e}")
+                st.error(f"خطأ في قراءة الملف المرفوع: {e}. يرجى إضاف 'openpyxl' لملف requirements.txt في المشروع.")
 
         if not catalog_df.empty:
             st.subheader("🔍 البحث والتحديد المباشر من ملف الأصناف")
