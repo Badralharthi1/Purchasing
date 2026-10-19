@@ -80,6 +80,8 @@ def init_db():
             reason TEXT,
             status TEXT,
             created_at TEXT,
+            reviewed_at TEXT,
+            approved_at TEXT,
             reviewer_notes TEXT,
             approver_notes TEXT,
             edit_history TEXT
@@ -90,6 +92,10 @@ def init_db():
     p_columns = [column[1] for column in cursor.fetchall()]
     if 'edit_history' not in p_columns:
         cursor.execute("ALTER TABLE purchases ADD COLUMN edit_history TEXT")
+    if 'reviewed_at' not in p_columns:
+        cursor.execute("ALTER TABLE purchases ADD COLUMN reviewed_at TEXT")
+    if 'approved_at' not in p_columns:
+        cursor.execute("ALTER TABLE purchases ADD COLUMN approved_at TEXT")
 
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
@@ -155,7 +161,8 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
-            requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles)
+            # عدم تحديد أي صلاحية افتراضياً (default=[]) لتكون فارغة
+            requested_roles = st.multiselect("الصلاحيات المطلوبة (اختر ما تحتاجه)", all_available_roles, default=[])
             submit_signup = st.form_submit_button("إرسال طلب التسجيل")
             
             if submit_signup:
@@ -278,9 +285,9 @@ else:
                         INSERT INTO purchases (
                             requester, item_number, nupco_number, e_market_code, 
                             item_name, unit_price, quantity, total_cost, 
-                            importance_criteria, reason, status, created_at, edit_history
+                            importance_criteria, reason, status, created_at, reviewed_at, approved_at, edit_history
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '')
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
                     ''', (
                         st.session_state.username, item_number, nupco_number, e_market_code, 
                         item_name, unit_price, quantity, total_cost, 
@@ -291,14 +298,15 @@ else:
                     st.success("✅ تم إرسال طلب الشراء بنجاح وتم تفريغ الحقول لإدخال طلب جديد.")
                     st.rerun()
 
-        st.subheader("📋 سجل طلباتك السابقة وملاحظات المراجعة والاعتماد")
+        st.subheader("📋 سجل طلباتك السابقة ومواعيد الاعتماد")
         conn = get_db()
         df_my_orders = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", item_number AS "رقم البند", nupco_number AS "رقم نوبكو", 
                    e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", 
                    unit_price AS "السعر الأفرادي", quantity AS "الكمية", total_cost AS "الإجمالي", 
                    importance_criteria AS "معيار الأهمية", reason AS "السبب", status AS "الحالة", 
-                   created_at AS "تاريخ الطلب", reviewer_notes AS "ملاحظات المراجعة", 
+                   created_at AS "تاريخ الإنشاء", reviewed_at AS "تاريخ ووقت المراجعة", 
+                   approved_at AS "تاريخ ووقت الاعتماد النهائي", reviewer_notes AS "ملاحظات المراجعة", 
                    approver_notes AS "ملاحظات الاعتماد", edit_history AS "سجل التعديلات" 
             FROM purchases WHERE requester = ?
         ''', conn, params=(st.session_state.username,))
@@ -315,7 +323,7 @@ else:
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
                    item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", quantity AS "الكمية", 
                    total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", reason AS "السبب", 
-                   created_at AS "التاريخ", edit_history AS "سجل التعديلات" 
+                   created_at AS "تاريخ الإنشاء", edit_history AS "سجل التعديلات" 
             FROM purchases WHERE status = 'قيد المراجعة'
         ''', conn)
         conn.close()
@@ -403,6 +411,7 @@ else:
                         
                         if submit_review:
                             new_total = new_unit_price * new_quantity
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                             
                             conn = get_db()
                             c = conn.cursor()
@@ -421,7 +430,7 @@ else:
                             )
                             
                             if has_changed:
-                                edit_msg = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المراجع {st.session_state.username}]"
+                                edit_msg = f"[{now_str} - تم التعديل بواسطة المراجع {st.session_state.username}]"
                                 updated_history = (old_history + "\n" + edit_msg).strip()
                             else:
                                 updated_history = old_history
@@ -431,14 +440,14 @@ else:
                                 UPDATE purchases 
                                 SET item_number = ?, nupco_number = ?, e_market_code = ?, item_name = ?, 
                                     unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
-                                    reason = ?, status = ?, reviewer_notes = ?, edit_history = ? 
+                                    reason = ?, status = ?, reviewed_at = ?, reviewer_notes = ?, edit_history = ? 
                                 WHERE id = ?
                             ''', (new_item_number, new_nupco_number, new_e_market_code, new_item_name, 
                                   new_unit_price, new_quantity, new_total, new_importance, 
-                                  new_reason, new_status, review_notes, updated_history, req_id))
+                                  new_reason, new_status, now_str, review_notes, updated_history, req_id))
                             conn.commit()
                             conn.close()
-                            st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
+                            st.success(f"تم تحديث وتعديل وتسجيل وقت مراجعة الطلب رقم {req_id} بنجاح!")
                             st.rerun()
 
     # ==================== الشاشة الثالثة ====================
@@ -450,7 +459,7 @@ else:
             SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", 
                    quantity AS "الكمية", total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", 
-                   reason AS "السبب", reviewer_notes AS "ملاحظات المراجعة", edit_history AS "سجل التعديلات" 
+                   reason AS "السبب", reviewed_at AS "تاريخ ووقت المراجعة", reviewer_notes AS "ملاحظات المراجعة", edit_history AS "سجل التعديلات" 
             FROM purchases WHERE status = 'بانتظار الاعتماد'
         ''', conn)
         
@@ -459,7 +468,8 @@ else:
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
                    item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", quantity AS "الكمية", 
                    total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", reason AS "السبب", 
-                   status AS "الحالة", created_at AS "تاريخ الطلب", approver_notes AS "ملاحظات الاعتماد" 
+                   status AS "الحالة", created_at AS "تاريخ الإنشاء", reviewed_at AS "تاريخ المراجعة", 
+                   approved_at AS "تاريخ الاعتماد النهائي", approver_notes AS "ملاحظات الاعتماد" 
             FROM purchases WHERE status = 'معتمد نهائياً'
         ''', conn)
         conn.close()
@@ -557,6 +567,7 @@ else:
                         
                         if submit_approval:
                             new_total_app = app_unit_price * app_quantity
+                            now_str_app = datetime.now().strftime("%Y-%m-%d %H:%M")
                             
                             conn = get_db()
                             c = conn.cursor()
@@ -575,7 +586,7 @@ else:
                             )
                             
                             if has_changed_app:
-                                edit_msg_app = f"[{datetime.now().strftime('%Y-%m-%d %H:%M')} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
+                                edit_msg_app = f"[{now_str_app} - تم التعديل بواسطة المعتمد {st.session_state.username}]"
                                 updated_history_app = (old_history_app + "\n" + edit_msg_app).strip()
                             else:
                                 updated_history_app = old_history_app
@@ -585,14 +596,14 @@ else:
                                 UPDATE purchases 
                                 SET item_number = ?, nupco_number = ?, e_market_code = ?, item_name = ?, 
                                     unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
-                                    reason = ?, status = ?, approver_notes = ?, edit_history = ? 
+                                    reason = ?, status = ?, approved_at = ?, approver_notes = ?, edit_history = ? 
                                 WHERE id = ?
                             ''', (app_item_number, app_nupco_number, app_e_market_code, app_item_name, 
                                   app_unit_price, app_quantity, new_total_app, app_importance, 
-                                  app_reason, final_status, approver_notes, updated_history_app, req_id_app))
+                                  app_reason, final_status, now_str_app, approver_notes, updated_history_app, req_id_app))
                             conn.commit()
                             conn.close()
-                            st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
+                            st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
     # ==================== الشاشة الرابعة ====================
@@ -695,6 +706,8 @@ else:
                 'reason': 'السبب',
                 'status': 'الحالة',
                 'created_at': 'تاريخ الطلب',
+                'reviewed_at': 'وقت المراجعة',
+                'approved_at': 'وقت الاعتماد',
                 'reviewer_notes': 'ملاحظات المراجعة',
                 'approver_notes': 'ملاحظات الاعتماد',
                 'edit_history': 'سجل التعديلات'
