@@ -729,4 +729,168 @@ else:
                                     unit_price = ?, quantity = ?, total_cost = ?, importance_criteria = ?, 
                                     reason = ?, status = ?, approved_at = ?, approver_notes = ?, edit_history = ? 
                                 WHERE id = ?
-                            ''', (app_item
+                            ''', (app_item_number, app_nupco_number, app_e_market_code, app_item_name, 
+                                  app_unit_price, app_quantity, new_total_app, app_importance, 
+                                  app_reason, final_status, now_str_app, approver_notes, updated_history_app, req_id_app))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
+                            st.rerun()
+
+    # ==================== الشاشة الرابعة ====================
+    elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
+        st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
+        
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT username, roles, status FROM users")
+        all_users_data = c.fetchall()
+        conn.close()
+        
+        st.subheader("📋 جدول المستخدمين الحاليين")
+        
+        if all_users_data:
+            header_col1, header_col2, header_col3, header_col4 = st.columns([2, 3, 2, 1])
+            header_col1.markdown("**اسم المستخدم**")
+            header_col2.markdown("**الصلاحيات**")
+            header_col3.markdown("**الحالة**")
+            header_col4.markdown("**إجراء الحذف**")
+            st.markdown("---")
+            
+            for u in all_users_data:
+                u_name = u[0]
+                u_roles = u[1]
+                u_status = u[2]
+                
+                row_col1, row_col2, row_col3, row_col4 = st.columns([2, 3, 2, 1])
+                row_col1.write(u_name)
+                row_col2.write(u_roles)
+                row_col3.write(u_status)
+                
+                with row_col4:
+                    if st.button("🗑️ حذف", key=f"table_del_{u_name}", type="secondary"):
+                        if u_name == "admin":
+                            st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
+                        elif u_name == st.session_state.username:
+                            st.error("❌ لا يمكنك حذف حسابك الحالي.")
+                        else:
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("DELETE FROM users WHERE username = ?", (u_name,))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"✅ تم حذف المستخدم ({u_name}) بنجاح!")
+                            st.rerun()
+                st.markdown("---")
+        else:
+            st.info("لا توجد حسابات مستخدمين مسجلة.")
+        
+        st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
+        
+        usernames_list = [u[0] for u in all_users_data]
+        selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
+        
+        if selected_target_user:
+            user_current_data = next((u for u in all_users_data if u[0] == selected_target_user), None)
+            current_roles_list = user_current_data[1].split(",") if user_current_data[1] else []
+            current_status = user_current_data[2]
+            
+            with st.form("direct_user_edit_form"):
+                st.write(f"تعديل صلاحيات وحالة المستخدم: **{selected_target_user}**")
+                
+                all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                updated_roles = st.multiselect(
+                    "تعديل الصلاحيات (تعدد الصلاحيات)", 
+                    all_roles_options,
+                    default=[r for r in current_roles_list if r in all_roles_options]
+                )
+                
+                status_options = ["معتمد", "قيد الانتظار", "موقوف"]
+                status_index = status_options.index(current_status) if current_status in status_options else 0
+                updated_status = st.selectbox("حالة الحساب", status_options, index=status_index)
+                
+                submit_user_edit = st.form_submit_button("حفظ التعديلات فوراً")
+                
+                if submit_user_edit:
+                    if updated_roles:
+                        roles_string = ",".join(updated_roles)
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute("UPDATE users SET roles = ?, status = ? WHERE username = ?", (roles_string, updated_status, selected_target_user))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"تم تحديث صلاحيات وحالة المستخدم ({selected_target_user}) بنجاح!")
+                        st.rerun()
+                    else:
+                        st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
+
+    # ==================== الشاشة الخامسة ====================
+    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
+        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
+        
+        conn = get_db()
+        df_all = pd.read_sql_query("SELECT * FROM purchases", conn)
+        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
+        conn.close()
+        
+        df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
+        df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
+        df_review_rejected = df_all[df_all['status'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
+        
+        df_final_approved = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
+        df_final_rejected = df_all[df_all['status'] == 'مرفوض نهائياً'] if not df_all.empty else pd.DataFrame()
+        
+        st.subheader("📌 إحصائيات مرحلة المراجعة")
+        rc1, rc2, rc3 = st.columns(3)
+        rc1.metric("🔍 طلبات قيد المراجعة (معلقة)", len(df_review_pending))
+        rc2.metric("✅ طلبات معتمدة بالمراجعة (تم تحويلها)", len(df_review_approved))
+        rc3.metric("❌ طلبات مرفوضة في المراجعة", len(df_review_rejected))
+        
+        st.markdown("---")
+        
+        st.subheader("📌 إحصائيات مرحلة الاعتماد النهائي")
+        fc1, fc2, fc3 = st.columns(3)
+        fc1.metric("⏳ طلبات بانتظار الاعتماد النهائي", len(df_all[df_all['status'] == 'بانتظار الاعتماد']) if not df_all.empty else 0)
+        fc2.metric("✅ طلبات معتمدة نهائياً", len(df_final_approved))
+        fc3.metric("🚫 طلبات مرفوضة نهائياً", len(df_final_rejected))
+        
+        st.markdown("---")
+        
+        st.subheader("🔍 تفاصيل مرحلة: قيد المراجعة (المعلقة)")
+        if not df_review_pending.empty:
+            st.dataframe(df_review_pending, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات معلقة قيد المراجعة.")
+            
+        st.markdown("---")
+        
+        st.subheader("⏳ تفاصيل مرحلة: بانتظار الاعتماد النهائي")
+        df_wait = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
+        if not df_wait.empty:
+            st.dataframe(df_wait, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
+            
+        st.markdown("---")
+        
+        st.subheader("✅ تفاصيل مرحلة: الطلبات المعتمدة نهائياً")
+        if not df_final_approved.empty:
+            total_approved_cost = df_final_approved['total_cost'].sum()
+            st.metric("💰 إجمالي تكلفة الطلبات المعتمدة نهائياً", f"{total_approved_cost:,.2f} ر.س")
+            st.dataframe(df_final_approved, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
+            
+        st.markdown("---")
+        
+        st.subheader("❌ تفاصيل الطلبات المرفوضة (سواء في المراجعة أو نهائياً)")
+        df_all_rejected = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
+        if not df_all_rejected.empty:
+            st.dataframe(df_all_rejected, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات مرفوضة حتى الآن.")
+            
+        st.markdown("---")
+        
+        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
+        st.dataframe(users_df, use_container_width=True)
