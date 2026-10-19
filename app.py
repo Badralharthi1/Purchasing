@@ -8,10 +8,9 @@ from datetime import datetime
 # --- إعداد الصفحة والتصميم الخاص للألوان والخطوط ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# تطبيق أنماط CSS مخصصة لتنسيق الخطوط (العناوين PT Bold Heading والفرعية Traditional Arabic)
+# تطبيق أنماط CSS مخصصة لتنسيق الخطوط والعناوين
 st.markdown("""
     <style>
-    /* استيراد خط PT Bold Heading و Traditional Arabic */
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700&display=swap');
     
     html, body, [class*="css"] {
@@ -20,7 +19,7 @@ st.markdown("""
     }
     
     h1, h2, h3, .main-title {
-        font-family: 'Cairo', 'PT Bold Heading', sans-serif !important;
+        font-family: 'Cairo', sans-serif !important;
         font-weight: bold;
     }
     
@@ -615,9 +614,9 @@ else:
                             st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
-    # ==================== الشاشة الرابعة ====================
+    # ==================== الشاشة الرابعة (مع ميزة حذف المستخدمين) ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
-        st.header("⚙️ الشاشة الرابعة: إعدادات المستخدمين وإدارة الصلاحيات المباشرة")
+        st.header("⚙️ الشاشة الرابعة: إعدادات المستخدمين وإدارة الصلاحيات وحذف المستخدمين")
         
         conn = get_db()
         users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
@@ -671,6 +670,26 @@ else:
                         st.rerun()
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
+
+        st.markdown("---")
+        st.subheader("🗑️ حذف مستخدم من النظام")
+        with st.form("delete_user_form"):
+            user_to_delete = st.selectbox("اختر اسم المستخدم للحذف", usernames_list, key="del_user_select")
+            submit_delete = st.form_submit_button("حذف المستخدم المحدد", type="primary")
+            
+            if submit_delete:
+                if user_to_delete == "admin":
+                    st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
+                elif user_to_delete == st.session_state.username:
+                    st.error("❌ لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول به.")
+                else:
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute("DELETE FROM users WHERE username = ?", (user_to_delete,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ تم حذف المستخدم ({user_to_delete}) بنجاح!")
+                    st.rerun()
 
     # ==================== الشاشة الخامسة (الداش بورد التفصيلية لكل مرحلة) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
