@@ -5,21 +5,29 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# --- إعداد الصفحة والتصميم الخاص للألوان ---
+# --- إعداد الصفحة والتصميم الخاص للألوان والخطوط ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# تطبيق أنماط CSS مخصصة لتنسيق الواجهة وجعلها جذابة
+# تطبيق أنماط CSS مخصصة لتنسيق الخطوط (العناوين PT Bold Heading والفرعية Traditional Arabic)
 st.markdown("""
     <style>
+    /* استيراد خط PT Bold Heading و Traditional Arabic */
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700&display=swap');
+    
     html, body, [class*="css"] {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: 'Traditional Arabic', 'Amiri', serif;
+        font-size: 1.15rem;
+    }
+    
+    h1, h2, h3, .main-title {
+        font-family: 'Cairo', 'PT Bold Heading', sans-serif !important;
+        font-weight: bold;
     }
     
     .main-title {
         text-align: center;
         color: #0073e6;
-        font-size: 2.2rem;
-        font-weight: bold;
+        font-size: 2.4rem;
         margin-top: 10px;
         margin-bottom: 25px;
     }
@@ -27,11 +35,13 @@ st.markdown("""
     .stButton>button {
         border-radius: 8px;
         font-weight: bold;
+        font-family: 'Cairo', sans-serif;
     }
     
     [data-testid="stMetricValue"] {
         font-size: 1.8rem;
         color: #0A4D68;
+        font-family: 'Cairo', sans-serif;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -671,60 +681,66 @@ else:
         users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
         conn.close()
         
-        # تقسيم البيانات حسب المراحل
-        df_review_stage = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
-        df_wait_approve = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
-        df_approved_stage = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
-        df_rejected_stage = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
+        # تقسيم البيانات والتصنيفات بدقة لكل مرحلة
+        df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
         
-        # مؤشرات عامة
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("📦 إجمالي الطلبات", len(df_all))
-        c2.metric("🔍 قيد المراجعة", len(df_review_stage))
-        c3.metric("⏳ بانتظار الاعتماد", len(df_wait_approve))
-        c4.metric("✅ المعتمدة نهائياً", len(df_approved_stage))
-        c5.metric("❌ المرفوضة", len(df_rejected_stage))
+        df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
+        df_review_rejected = df_all[df_all['status'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
+        
+        df_final_approved = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
+        df_final_rejected = df_all[df_all['status'] == 'مرفوض نهائياً'] if not df_all.empty else pd.DataFrame()
+        
+        st.subheader("📌 إحصائيات مرحلة المراجعة")
+        rc1, rc2, rc3 = st.columns(3)
+        rc1.metric("🔍 طلبات قيد المراجعة (معلقة)", len(df_review_pending))
+        rc2.metric("✅ طلبات معتمدة بالمراجعة (تم تحويلها)", len(df_review_approved))
+        rc3.metric("❌ طلبات مرفوضة في المراجعة", len(df_review_rejected))
         
         st.markdown("---")
         
-        # 1. مرحلة قيد المراجعة
-        st.subheader("🔍 تفاصيل مرحلة: قيد المراجعة")
-        if not df_review_stage.empty:
-            st.dataframe(df_review_stage, use_container_width=True)
+        st.subheader("📌 إحصائيات مرحلة الاعتماد النهائي")
+        fc1, fc2, fc3 = st.columns(3)
+        fc1.metric("⏳ طلبات بانتظار الاعتماد النهائي", len(df_all[df_all['status'] == 'بانتظار الاعتماد']) if not df_all.empty else 0)
+        fc2.metric("✅ طلبات معتمدة نهائياً", len(df_final_approved))
+        fc3.metric("🚫 طلبات مرفوضة نهائياً", len(df_final_rejected))
+        
+        st.markdown("---")
+        
+        st.subheader("🔍 تفاصيل مرحلة: قيد المراجعة (المعلقة)")
+        if not df_review_pending.empty:
+            st.dataframe(df_review_pending, use_container_width=True)
         else:
-            st.info("لا توجد طلبات في مرحلة قيد المراجعة حالياً.")
+            st.info("لا توجد طلبات معلقة قيد المراجعة.")
             
         st.markdown("---")
         
-        # 2. مرحلة بانتظار الاعتماد
         st.subheader("⏳ تفاصيل مرحلة: بانتظار الاعتماد النهائي")
-        if not df_wait_approve.empty:
-            st.dataframe(df_wait_approve, use_container_width=True)
+        df_wait = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
+        if not df_wait.empty:
+            st.dataframe(df_wait, use_container_width=True)
         else:
             st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
             
         st.markdown("---")
         
-        # 3. مرحلة المعتمدة نهائياً
         st.subheader("✅ تفاصيل مرحلة: الطلبات المعتمدة نهائياً")
-        if not df_approved_stage.empty:
-            total_approved_cost = df_approved_stage['total_cost'].sum()
-            st.metric("💰 إجمالي تكلفة الطلبات المعتمدة", f"{total_approved_cost:,.2f} ر.س")
-            st.dataframe(df_approved_stage, use_container_width=True)
+        if not df_final_approved.empty:
+            total_approved_cost = df_final_approved['total_cost'].sum()
+            st.metric("💰 إجمالي تكلفة الطلبات المعتمدة نهائياً", f"{total_approved_cost:,.2f} ر.س")
+            st.dataframe(df_final_approved, use_container_width=True)
         else:
             st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
             
         st.markdown("---")
         
-        # 4. مرحلة المرفوضة
-        st.subheader("❌ تفاصيل مرحلة: الطلبات المرفوضة")
-        if not df_rejected_stage.empty:
-            st.dataframe(df_rejected_stage, use_container_width=True)
+        st.subheader("❌ تفاصيل الطلبات المرفوضة (سواء في المراجعة أو نهائياً)")
+        df_all_rejected = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
+        if not df_all_rejected.empty:
+            st.dataframe(df_all_rejected, use_container_width=True)
         else:
             st.info("لا توجد طلبات مرفوضة حتى الآن.")
             
         st.markdown("---")
         
-        # 5. جدول المستخدمين
         st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
         st.dataframe(users_df, use_container_width=True)
