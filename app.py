@@ -38,13 +38,19 @@ def init_db():
         )
     ''')
     
+    # تحديث جدول طلبات الشراء ليشمل جميع الحقول الجديدة
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             requester TEXT,
+            item_number TEXT,
+            nupco_number TEXT,
+            e_market_code TEXT,
             item_name TEXT,
+            unit_price REAL,
             quantity INTEGER,
-            estimated_cost REAL,
+            total_cost REAL,
+            importance_criteria TEXT,
             reason TEXT,
             status TEXT,
             created_at TEXT,
@@ -158,13 +164,22 @@ else:
     if selected_screen == "الشاشة 1: المستخدم الأول (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         with st.form("purchase_form"):
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
-                item_name = st.text_input("اسم البند / الصنف المطلوب")
-                quantity = st.number_input("الكمية", min_value=1, step=1)
+                item_number = st.text_input("1. رقم البند")
+                nupco_number = st.text_input("2. رقم نوبكو")
+                e_market_code = st.text_input("3. كود السوق الالكتروني للبنود التخصصية")
             with col2:
-                estimated_cost = st.number_input("التكلفة التقديرية (ر.س)", min_value=0.0, step=10.0)
-                reason = st.text_area("المبررات / سبب الشراء")
+                item_name = st.text_input("4. اسم الصنف")
+                unit_price = st.number_input("5. السعر الافرادي (ر.س)", min_value=0.0, step=1.0)
+                quantity = st.number_input("6. الكمية المطلوبة", min_value=1, step=1)
+            with col3:
+                importance_criteria = st.selectbox("7. معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                reason = st.text_area("8. السبب / المبررات")
+            
+            # حساب إجمالي التكلفة تلقائياً
+            total_cost = unit_price * quantity
+            st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
             
             submit_order = st.form_submit_button("إرسال الطلب")
             if submit_order:
@@ -172,18 +187,33 @@ else:
                     conn = get_db()
                     c = conn.cursor()
                     c.execute('''
-                        INSERT INTO purchases (requester, item_name, quantity, estimated_cost, reason, status, created_at)
-                        VALUES (?, ?, ?, ?, ?, 'قيد المراجعة', ?)
-                    ''', (st.session_state.username, item_name, quantity, estimated_cost, reason, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                        INSERT INTO purchases (
+                            requester, item_number, nupco_number, e_market_code, 
+                            item_name, unit_price, quantity, total_cost, 
+                            importance_criteria, reason, status, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?)
+                    ''', (
+                        st.session_state.username, item_number, nupco_number, e_market_code, 
+                        item_name, unit_price, quantity, total_cost, 
+                        importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
+                    ))
                     conn.commit()
                     conn.close()
                     st.success("تم إرسال طلب الشراء بنجاح وهو الآن قيد المراجعة.")
                 else:
-                    st.error("الرجاء إدخال اسم البند على الأقل.")
+                    st.error("الرجاء إدخال اسم الصنف على الأقل.")
 
         st.subheader("📋 سجل طلباتك السابقة وملاحظات المراجعة والاعتماد")
         conn = get_db()
-        df_my_orders = pd.read_sql_query("SELECT id, item_name, quantity, estimated_cost, status, created_at, reviewer_notes, approver_notes FROM purchases WHERE requester = ?", conn, params=(st.session_state.username,))
+        df_my_orders = pd.read_sql_query('''
+            SELECT id AS "رقم الطلب", item_number AS "رقم البند", nupco_number AS "رقم نوبكو", 
+                   e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", 
+                   unit_price AS "السعر الأفرادي", quantity AS "الكمية", total_cost AS "الإجمالي", 
+                   importance_criteria AS "معيار الأهمية", reason AS "السبب", status AS "الحالة", 
+                   created_at AS "تاريخ الطلب", reviewer_notes AS "ملاحظات المراجعة", approver_notes AS "ملاحظات الاعتماد" 
+            FROM purchases WHERE requester = ?
+        ''', conn, params=(st.session_state.username,))
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
@@ -191,7 +221,14 @@ else:
     elif selected_screen == "الشاشة 2: المراجعة":
         st.header("🔍 الشاشة الثانية: مراجعة الطلبات")
         conn = get_db()
-        df_review = pd.read_sql_query("SELECT id, requester, item_name, quantity, estimated_cost, reason, created_at FROM purchases WHERE status = 'قيد المراجعة'", conn)
+        df_review = pd.read_sql_query('''
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+                   nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
+                   item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", quantity AS "الكمية", 
+                   total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", reason AS "السبب", 
+                   created_at AS "التاريخ" 
+            FROM purchases WHERE status = 'قيد المراجعة'
+        ''', conn)
         conn.close()
         
         if df_review.empty:
@@ -199,7 +236,7 @@ else:
         else:
             st.dataframe(df_review, use_container_width=True)
             st.markdown("---")
-            req_id = st.number_input("أدخل رقم الطلب (ID) المراد اتخاذ إجراء بشأنه", min_value=1, step=1)
+            req_id = st.number_input("أدخل رقم الطلب (رقم الطلب) المراد اتخاذ إجراء بشأنه", min_value=1, step=1)
             review_notes = st.text_input("ملاحظات المراجعة")
             action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
             
@@ -217,7 +254,13 @@ else:
     elif selected_screen == "الشاشة 3: الاعتماد":
         st.header("✅ الشاشة الثالثة: اعتماد الطلبات النهائي")
         conn = get_db()
-        df_approve = pd.read_sql_query("SELECT id, requester, item_name, quantity, estimated_cost, reason, reviewer_notes FROM purchases WHERE status = 'بانتظار الاعتماد'", conn)
+        df_approve = pd.read_sql_query('''
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
+                   nupco_number AS "رقم نوبكو", item_name AS "اسم الصنف", unit_price AS "السعر الأفرادي", 
+                   quantity AS "الكمية", total_cost AS "الإجمالي", importance_criteria AS "معيار الأهمية", 
+                   reason AS "السبب", reviewer_notes AS "ملاحظات المراجعة" 
+            FROM purchases WHERE status = 'بانتظار الاعتماد'
+        ''', conn)
         conn.close()
         
         if df_approve.empty:
@@ -225,7 +268,7 @@ else:
         else:
             st.dataframe(df_approve, use_container_width=True)
             st.markdown("---")
-            req_id = st.number_input("أدخل رقم الطلب (ID) للاعتماد النهائي", min_value=1, step=1)
+            req_id = st.number_input("أدخل رقم الطلب (رقم الطلب) للاعتماد النهائي", min_value=1, step=1)
             approver_notes = st.text_input("ملاحظات الاعتماد")
             final_action = st.selectbox("قرار الاعتماد النهائي", ["اعتماد نهائي للشراء", "رفض نهائي"])
             
@@ -244,7 +287,7 @@ else:
         st.header("⚙️ الشاشة الرابعة: إعدادات المستخدمين وإدارة الصلاحيات")
         
         conn = get_db()
-        users_df = pd.read_sql_query("SELECT username, role, status FROM users", conn)
+        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', role AS 'الصلاحية', status AS 'الحالة' FROM users", conn)
         conn.close()
         
         st.subheader("قائمة كافة المستخدمين وحساباتهم المعلقة أو المعتمدة")
@@ -280,12 +323,11 @@ else:
         all_users = pd.read_sql_query("SELECT * FROM users", conn)
         conn.close()
         
-        # مؤشرات عامة (Metrics)
         total_orders = len(all_purchases)
         total_users = len(all_users)
         approved_orders = len(all_purchases[all_purchases['status'] == 'معتمد نهائياً']) if not all_purchases.empty else 0
         pending_orders = len(all_purchases[all_purchases['status'].isin(['قيد المراجعة', 'بانتظار الاعتماد'])]) if not all_purchases.empty else 0
-        total_cost = all_purchases['estimated_cost'].sum() if not all_purchases.empty else 0.0
+        total_cost = all_purchases['total_cost'].sum() if not all_purchases.empty else 0.0
         
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("إجمالي الطلبات", total_orders)
