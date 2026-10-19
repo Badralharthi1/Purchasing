@@ -161,7 +161,6 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
-            # عدم تحديد أي صلاحية افتراضياً (default=[]) لتكون فارغة
             requested_roles = st.multiselect("الصلاحيات المطلوبة (اختر ما تحتاجه)", all_available_roles, default=[])
             submit_signup = st.form_submit_button("إرسال طلب التسجيل")
             
@@ -663,64 +662,69 @@ else:
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
 
-    # ==================== الشاشة الخامسة ====================
+    # ==================== الشاشة الخامسة (الداش بورد التفصيلية لكل مرحلة) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
+        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
         
         conn = get_db()
-        all_purchases = pd.read_sql_query("SELECT * FROM purchases", conn)
-        all_users = pd.read_sql_query("SELECT * FROM users", conn)
+        df_all = pd.read_sql_query("SELECT * FROM purchases", conn)
+        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
         conn.close()
         
-        total_uploaded = len(all_purchases)
-        rejected_in_review = len(all_purchases[all_purchases['status'] == 'مرفوض في المراجعة']) if not all_purchases.empty else 0
-        review_approved = len(all_purchases[all_purchases['status'] == 'بانتظار الاعتماد']) if not all_purchases.empty else 0
-        finally_approved = len(all_purchases[all_purchases['status'] == 'معتمد نهائياً']) if not all_purchases.empty else 0
-        finally_rejected = len(all_purchases[all_purchases['status'] == 'مرفوض نهائياً']) if not all_purchases.empty else 0
-        total_cost = all_purchases['total_cost'].sum() if not all_purchases.empty else 0.0
+        # تقسيم البيانات حسب المراحل
+        df_review_stage = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
+        df_wait_approve = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
+        df_approved_stage = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
+        df_rejected_stage = df_all[df_all['status'].str.contains('مرفوض', na=False)] if not df_all.empty else pd.DataFrame()
         
-        col1, col2, col3 = st.columns(3)
-        col1.metric("📦 إجمالي الطلبات المرفوعة", total_uploaded)
-        col2.metric("🔍 مراجعة بالاعتماد (معلقة)", review_approved)
-        col3.metric("❌ المراجعة بالرفض", rejected_in_review)
-        
-        col4, col5, col6 = st.columns(3)
-        col4.metric("✅ المعتمدة نهائياً", finally_approved)
-        col5.metric("🚫 المرفوضة نهائياً", finally_rejected)
-        col6.metric("💰 إجمالي التكاليف (ر.س)", f"{total_cost:,.2f}")
+        # مؤشرات عامة
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("📦 إجمالي الطلبات", len(df_all))
+        c2.metric("🔍 قيد المراجعة", len(df_review_stage))
+        c3.metric("⏳ بانتظار الاعتماد", len(df_wait_approve))
+        c4.metric("✅ المعتمدة نهائياً", len(df_approved_stage))
+        c5.metric("❌ المرفوضة", len(df_rejected_stage))
         
         st.markdown("---")
-        st.subheader("📈 جدول تفاصيل كافة الطلبات في النظام")
-        if not all_purchases.empty:
-            display_purchases = all_purchases.rename(columns={
-                'id': 'رقم الطلب',
-                'requester': 'المستخدم',
-                'item_number': 'رقم البند',
-                'nupco_number': 'رقم نوبكو',
-                'e_market_code': 'كود السوق الإلكتروني',
-                'item_name': 'اسم الصنف',
-                'unit_price': 'السعر الأفرادي',
-                'quantity': 'الكمية',
-                'total_cost': 'الإجمالي',
-                'importance_criteria': 'معيار الأهمية',
-                'reason': 'السبب',
-                'status': 'الحالة',
-                'created_at': 'تاريخ الطلب',
-                'reviewed_at': 'وقت المراجعة',
-                'approved_at': 'وقت الاعتماد',
-                'reviewer_notes': 'ملاحظات المراجعة',
-                'approver_notes': 'ملاحظات الاعتماد',
-                'edit_history': 'سجل التعديلات'
-            })
-            st.dataframe(display_purchases, use_container_width=True)
+        
+        # 1. مرحلة قيد المراجعة
+        st.subheader("🔍 تفاصيل مرحلة: قيد المراجعة")
+        if not df_review_stage.empty:
+            st.dataframe(df_review_stage, use_container_width=True)
         else:
-            st.info("لا توجد بيانات طلبات مسجلة حتى الآن.")
+            st.info("لا توجد طلبات في مرحلة قيد المراجعة حالياً.")
             
         st.markdown("---")
-        st.subheader("👥 ملخص المستخدمين وحالاتهم وصلاحياتهم")
-        display_users = all_users.rename(columns={
-            'username': 'اسم المستخدم',
-            'roles': 'الصلاحيات',
-            'status': 'الحالة'
-        })[['اسم المستخدم', 'الصلاحيات', 'الحالة']]
-        st.dataframe(display_users, use_container_width=True)
+        
+        # 2. مرحلة بانتظار الاعتماد
+        st.subheader("⏳ تفاصيل مرحلة: بانتظار الاعتماد النهائي")
+        if not df_wait_approve.empty:
+            st.dataframe(df_wait_approve, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
+            
+        st.markdown("---")
+        
+        # 3. مرحلة المعتمدة نهائياً
+        st.subheader("✅ تفاصيل مرحلة: الطلبات المعتمدة نهائياً")
+        if not df_approved_stage.empty:
+            total_approved_cost = df_approved_stage['total_cost'].sum()
+            st.metric("💰 إجمالي تكلفة الطلبات المعتمدة", f"{total_approved_cost:,.2f} ر.س")
+            st.dataframe(df_approved_stage, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
+            
+        st.markdown("---")
+        
+        # 4. مرحلة المرفوضة
+        st.subheader("❌ تفاصيل مرحلة: الطلبات المرفوضة")
+        if not df_rejected_stage.empty:
+            st.dataframe(df_rejected_stage, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات مرفوضة حتى الآن.")
+            
+        st.markdown("---")
+        
+        # 5. جدول المستخدمين
+        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
+        st.dataframe(users_df, use_container_width=True)
