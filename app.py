@@ -246,12 +246,11 @@ else:
         if df_review.empty:
             st.info("لا توجد طلبات جديدة بانتظار المراجعة حالياً.")
         else:
-            # تجميع أو تصفية الطلبات التي تحمل نفس رقم نوبكو
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
             nupco_filter = st.selectbox("تصفية أو دمج حسب رقم نوبكو (اختياري)", ["الكل"] + list(df_review["رقم نوبكو"].dropna().unique()))
             if nupco_filter != "الكل":
                 filtered_df = df_review[df_review["رقم نوبكو"] == nupco_filter]
-                st.info(جود {len(filtered_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter})
+                st.info(f"يوجد {len(filtered_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
                 st.dataframe(filtered_df, use_container_width=True)
             else:
                 st.dataframe(df_review, use_container_width=True)
@@ -260,7 +259,6 @@ else:
             st.subheader("⚙️ اتخاذ إجراء وتعديل الطلب")
             req_id = st.number_input("أدخل رقم الطلب المراد مراجعته وتعديله", min_value=1, step=1)
             
-            # جلب بيانات الطلب الحالي للتعديل
             conn = get_db()
             c = conn.cursor()
             c.execute("SELECT item_name, unit_price, quantity, reason FROM purchases WHERE id = ?", (req_id,))
@@ -317,7 +315,6 @@ else:
             FROM purchases WHERE status = 'بانتظار الاعتماد'
         ''', conn)
         
-        # جلب كافة الطلبات المعتمدة نهائياً لتصديرها لإكسل
         df_all_approved = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", requester AS "المستخدم", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", 
@@ -328,7 +325,6 @@ else:
         ''', conn)
         conn.close()
         
-        # زر تصدير الطلبات المعتمدة إلى إكسل
         if not df_all_approved.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -347,10 +343,10 @@ else:
             st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
         else:
             st.subheader("📦 الطلبات المعلقة للاعتماد النهائي")
-            nupco_filter_app = st.selectbox("تصفية أو دمج حسب رقم نوبكو للاعتماد", ["الكل"] + list(df_approve["رقم نوبكو"].dropna().unique()))
+            nupco_filter_app = st.selectbox("تصفية أو دمج حسب رقم نوبكو للاعتماد", ["الكل"] + list(df_approve["nupco_number"].dropna().unique()))
             if nupco_filter_app != "الكل":
                 filtered_app_df = df_approve[df_approve["رقم نوبكو"] == nupco_filter_app]
-                st.info(جود {len(filtered_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app})
+                st.info(f"يوجد {len(filtered_app_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter_app}")
                 st.dataframe(filtered_app_df, use_container_width=True)
             else:
                 st.dataframe(df_approve, use_container_width=True)
@@ -426,7 +422,6 @@ else:
         selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
         
         if selected_target_user:
-            # جلب البيانات الحالية للمستخدم المحدد
             user_current_data = next((u for u in all_users_data if u[0] == selected_target_user), None)
             current_roles_list = user_current_data[1].split(",") if user_current_data[1] else []
             current_status = user_current_data[2]
@@ -468,7 +463,6 @@ else:
         all_users = pd.read_sql_query("SELECT * FROM users", conn)
         conn.close()
         
-        # حساب المؤشرات التفصيلية المطلوبة باللغة العربية
         total_uploaded = len(all_purchases)
         rejected_in_review = len(all_purchases[all_purchases['status'] == 'مرفوض في المراجعة']) if not all_purchases.empty else 0
         review_approved = len(all_purchases[all_purchases['status'] == 'بانتظار الاعتماد']) if not all_purchases.empty else 0
@@ -476,7 +470,6 @@ else:
         finally_rejected = len(all_purchases[all_purchases['status'] == 'مرفوض نهائياً']) if not all_purchases.empty else 0
         total_cost = all_purchases['total_cost'].sum() if not all_purchases.empty else 0.0
         
-        # عرض المؤشرات بشكل تفاعلي وجذاب باستخدام الأعمدة والمقاييس (Metrics)
         col1, col2, col3 = st.columns(3)
         col1.metric("📦 إجمالي الطلبات المرفوعة", total_uploaded)
         col2.metric("🔍 مراجعة بالاعتماد (معلقة)", review_approved)
@@ -490,7 +483,6 @@ else:
         st.markdown("---")
         st.subheader("📈 جدول تفاصيل كافة الطلبات في النظام")
         if not all_purchases.empty:
-            # تعريب أسماء الأعمدة في العرض
             display_purchases = all_purchases.rename(columns={
                 'id': 'رقم الطلب',
                 'requester': 'المستخدم',
