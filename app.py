@@ -132,21 +132,38 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# تهيئة القيم النصية المباشرة للنموذج
-if 'in_item_num' not in st.session_state:
-    st.session_state.in_item_num = ""
-if 'in_nupco_num' not in st.session_state:
-    st.session_state.in_nupco_num = ""
-if 'in_item_name' not in st.session_state:
-    st.session_state.in_item_name = ""
-if 'in_e_market' not in st.session_state:
-    st.session_state.in_e_market = ""
-if 'in_unit_price' not in st.session_state:
-    st.session_state.in_unit_price = 0.0
-if 'in_quantity' not in st.session_state:
-    st.session_state.in_quantity = 1
-if 'in_reason' not in st.session_state:
-    st.session_state.in_reason = ""
+# تهيئة القيم للبحث والربط
+if 'val_item_num' not in st.session_state:
+    st.session_state.val_item_num = None
+if 'val_nupco_num' not in st.session_state:
+    st.session_state.val_nupco_num = None
+if 'val_item_name' not in st.session_state:
+    st.session_state.val_item_name = None
+
+# --- دوال البحث المباشر والربط التلقائي ---
+def on_change_item_num():
+    v = st.session_state.sb_item_num
+    if v and not catalog_df.empty:
+        m = catalog_df[catalog_df['رقم البند'] == str(v).strip()]
+        if not m.empty:
+            st.session_state.val_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.val_item_name = str(m.iloc[0]['اسم الصنف'])
+
+def on_change_nupco():
+    v = st.session_state.sb_nupco_num
+    if v and not catalog_df.empty:
+        m = catalog_df[catalog_df['رقم نوبكو'] == str(v).strip()]
+        if not m.empty:
+            st.session_state.val_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.val_item_name = str(m.iloc[0]['اسم الصنف'])
+
+def on_change_item_name():
+    v = st.session_state.sb_item_name
+    if v and not catalog_df.empty:
+        m = catalog_df[catalog_df['اسم الصنف'] == str(v).strip()]
+        if not m.empty:
+            st.session_state.val_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.val_nupco_num = str(m.iloc[0]['رقم نوبكو'])
 
 # --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
@@ -274,49 +291,73 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (بدون إضافات وبدون أخطاء) ====================
+    # ==================== الشاشة الأولى (البحث في الخانة المباشرة مع قبول القيم الجديدة) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
+        # تحضير قوائم الخيارات من ملف الإكسل
+        list_items = sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
+        list_nupco = sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
+        list_names = sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
+
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            item_number = st.text_input("1. رقم البند *", value=st.session_state.in_item_num, key="k_item_num")
+            # 1. رقم البند (ابحث أو اكتب مباشرة)
+            item_num_val = st.selectbox(
+                "1. رقم البند (ابحث أو اكتب يدوياً) *",
+                options=list_items,
+                index=list_items.index(st.session_state.val_item_num) if st.session_state.val_item_num in list_items else None,
+                key="sb_item_num",
+                on_change=on_change_item_num,
+                accept_new_options=True
+            )
             
-            # جلب البيانات تلقائياً إذا كان رقم البند مدخلاً وموجوداً بالإكسل
-            if item_number.strip() and not catalog_df.empty:
-                m = catalog_df[catalog_df['رقم البند'] == item_number.strip()]
-                if not m.empty:
-                    st.session_state.in_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-                    st.session_state.in_item_name = str(m.iloc[0]['اسم الصنف'])
-
-            nupco_number = st.text_input("2. رقم نوبكو *", value=st.session_state.in_nupco_num, key="k_nupco_num")
-            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=st.session_state.in_e_market, key="k_e_market")
+            # 2. رقم نوبكو (ابحث أو اكتب مباشرة)
+            nupco_num_val = st.selectbox(
+                "2. رقم نوبكو (ابحث أو اكتب يدوياً) *",
+                options=list_nupco,
+                index=list_nupco.index(st.session_state.val_nupco_num) if st.session_state.val_nupco_num in list_nupco else None,
+                key="sb_nupco_num",
+                on_change=on_change_nupco,
+                accept_new_options=True
+            )
+            
+            e_market_code = st.text_input("3. كود السوق الالكتروني *", key="input_e_market")
 
         with col2:
-            item_name = st.text_input("4. اسم الصنف *", value=st.session_state.in_item_name, key="k_item_name")
-            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=float(st.session_state.in_unit_price), key="k_unit_price")
-            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=int(st.session_state.in_quantity), key="k_quantity")
+            # 4. اسم الصنف (ابحث أو اكتب مباشرة)
+            item_name_val = st.selectbox(
+                "4. اسم الصنف (ابحث أو اكتب يدوياً) *",
+                options=list_names,
+                index=list_names.index(st.session_state.val_item_name) if st.session_state.val_item_name in list_names else None,
+                key="sb_item_name",
+                on_change=on_change_item_name,
+                accept_new_options=True
+            )
+            
+            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, key="input_unit_price")
+            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, key="input_quantity")
 
         with col3:
             importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-            reason = st.text_area("8. السبب / المبررات (اختياري)", value=st.session_state.in_reason, key="k_reason")
+            reason = st.text_area("8. السبب / المبررات (اختياري)", key="input_reason")
 
         total_cost = unit_price * quantity
         st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
 
         if st.button("إرسال الطلب", use_container_width=True):
-            fin_item_num = item_number.strip()
-            fin_nupco_num = nupco_number.strip()
-            fin_item_name = item_name.strip()
+            str_item_num = str(item_num_val).strip() if item_num_val else ""
+            str_nupco_num = str(nupco_num_val).strip() if nupco_num_val else ""
+            str_item_name = str(item_name_val).strip() if item_name_val else ""
 
-            if not fin_item_num:
+            if not str_item_num:
                 st.error("❌ حقل 'رقم البند' إلزامي.")
-            elif not fin_nupco_num:
+            elif not str_nupco_num:
                 st.error("❌ حقل 'رقم نوبكو' إلزامي.")
             elif not e_market_code.strip():
                 st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
-            elif not fin_item_name:
+            elif not str_item_name:
                 st.error("❌ حقل 'اسم الصنف' إلزامي.")
             elif unit_price <= 0:
                 st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
@@ -333,21 +374,17 @@ else:
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
                 ''', (
-                    st.session_state.username, fin_item_num, fin_nupco_num, e_market_code.strip(), 
-                    fin_item_name, unit_price, quantity, total_cost, 
+                    st.session_state.username, str_item_num, str_nupco_num, e_market_code.strip(), 
+                    str_item_name, unit_price, quantity, total_cost, 
                     importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
                 ))
                 conn.commit()
                 conn.close()
                 
-                # تفريغ جميع الخانات
-                st.session_state.in_item_num = ""
-                st.session_state.in_nupco_num = ""
-                st.session_state.in_item_name = ""
-                st.session_state.in_e_market = ""
-                st.session_state.in_unit_price = 0.0
-                st.session_state.in_quantity = 1
-                st.session_state.in_reason = ""
+                # تفريغ قيم الجلسة بعد الإرسال
+                st.session_state.val_item_num = None
+                st.session_state.val_nupco_num = None
+                st.session_state.val_item_name = None
                 
                 st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ الخانات لتقديم طلب جديد!")
                 st.rerun()
@@ -368,7 +405,7 @@ else:
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية ====================
+    # ==================== الشاشة الثانية (استثناء البند الحالي من جدول السجل) ====================
     elif selected_screen == "الشاشة 2: المراجعة":
         st.header("🔍 الشاشة الثانية: مراجعة الطلبات وتعديلها أو دمجها")
         
@@ -443,7 +480,6 @@ else:
                 req_id = int(target_df.iloc[selected_index]["رقم الطلب"])
                 selected_nupco_val = str(target_df.iloc[selected_index]["رقم نوبكو"])
                 
-                # السجل التاريخي للبند بدون الطلب الحالي
                 st.markdown("---")
                 st.subheader(f"🔍 السجل التاريخي للطلبات السابقة لرقم نوبكو: `{selected_nupco_val}` (بدون الطلب الحالي)")
                 if not df_all_system.empty and selected_nupco_val.strip() != "":
