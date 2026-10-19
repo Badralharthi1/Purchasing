@@ -133,17 +133,26 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
+# تهيئة القيم الأولية للحقول
 if 'input_item_number' not in st.session_state:
     st.session_state.input_item_number = ""
 if 'input_nupco_number' not in st.session_state:
     st.session_state.input_nupco_number = ""
 if 'input_item_name' not in st.session_state:
     st.session_state.input_item_name = ""
+if 'input_e_market' not in st.session_state:
+    st.session_state.input_e_market = ""
+if 'input_unit_price' not in st.session_state:
+    st.session_state.input_unit_price = 0.0
+if 'input_quantity' not in st.session_state:
+    st.session_state.input_quantity = 1
+if 'input_reason' not in st.session_state:
+    st.session_state.input_reason = ""
 
-# --- دالة تحديث الحقول عند اختيار صنف من القائمة ---
-def on_select_catalog_item():
-    selected = st.session_state.get("selected_catalog_option", "")
-    if selected and selected != "-- اختر صنفاً من القائمة أو أدخل يدوياً --":
+# --- دالة التعبئة التلقائية المباشرة عند التحديد من القائمة ---
+def on_select_item_direct():
+    selected = st.session_state.get("selected_item_direct", "")
+    if selected and selected != "-- اختر أو ابحث باسم الصنف / نوبكو / البند --" and not catalog_df.empty:
         matched_row = catalog_df[catalog_df['display_label'] == selected].iloc[0]
         st.session_state.input_item_number = str(matched_row['رقم البند'])
         st.session_state.input_nupco_number = str(matched_row['رقم نوبكو'])
@@ -275,80 +284,92 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى ====================
+    # ==================== الشاشة الأولى (البحث المباشر والتفريغ التلقائي) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
+        # قائمة خيارات الأصناف للبحث المباشر
+        catalog_options = ["-- اختر أو ابحث باسم الصنف / نوبكو / البند --"]
         if not catalog_df.empty:
-            st.success(f"✅ تم تحميل {len(catalog_df):,} صنف من ملف الإكسل بنجاح!")
-            st.subheader("🔍 البحث والتحديد المباشر من ملف الأصناف")
-            st.selectbox(
-                "ابحث واختر الصنف (بالاسم، أو رقم نوبكو، أو رقم البند):",
-                ["-- اختر صنفاً من القائمة أو أدخل يدوياً --"] + catalog_df['display_label'].tolist(),
-                key="selected_catalog_option",
-                on_change=on_select_catalog_item
-            )
-        else:
-            st.warning("⚠️ لم يتم العثور على ملف الأصناف في مجلد التطبيق.")
+            catalog_options += catalog_df['display_label'].tolist()
+
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            item_number = st.text_input("1. رقم البند *", value=st.session_state.input_item_number, key="k_item_number")
+            nupco_number = st.text_input("2. رقم نوبكو *", value=st.session_state.input_nupco_number, key="k_nupco_number")
+            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=st.session_state.input_e_market, key="k_e_market")
+
+        with col2:
+            if not catalog_df.empty:
+                st.selectbox(
+                    "4. اسم الصنف (بحث آلي مباشر) *",
+                    catalog_options,
+                    key="selected_item_direct",
+                    on_change=on_select_item_direct
+                )
+                item_name = st.text_input("أو تعديل اسم الصنف دويًا:", value=st.session_state.input_item_name, key="k_item_name")
+            else:
+                item_name = st.text_input("4. اسم الصنف *", value=st.session_state.input_item_name, key="k_item_name")
+                
+            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=st.session_state.input_unit_price, key="k_unit_price")
+            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=st.session_state.input_quantity, key="k_quantity")
+
+        with col3:
+            importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+            reason = st.text_area("8. السبب / المبررات (اختياري)", value=st.session_state.input_reason, key="k_reason")
+
+        total_cost = unit_price * quantity
+        st.markdown(f"### **إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
+
+        if st.button("🚀 إرسال الطلب", type="primary", use_container_width=True):
+            final_item_name = item_name if item_name.strip() else st.session_state.input_item_name
+            
+            if not item_number.strip():
+                st.error("❌ حقل 'رقم البند' إلزامي.")
+            elif not nupco_number.strip():
+                st.error("❌ حقل 'رقم نوبكو' إلزامي.")
+            elif not e_market_code.strip():
+                st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
+            elif not final_item_name.strip():
+                st.error("❌ حقل 'اسم الصنف' إلزامي.")
+            elif unit_price <= 0:
+                st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
+            elif quantity <= 0:
+                st.error("❌ يرجى إدخال 'كمية' أعلى من الصفر.")
+            else:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute('''
+                    INSERT INTO purchases (
+                        requester, item_number, nupco_number, e_market_code, 
+                        item_name, unit_price, quantity, total_cost, 
+                        importance_criteria, reason, status, created_at, reviewed_at, approved_at, edit_history
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
+                ''', (
+                    st.session_state.username, item_number, nupco_number, e_market_code, 
+                    final_item_name, unit_price, quantity, total_cost, 
+                    importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
+                ))
+                conn.commit()
+                conn.close()
+                
+                # تفريغ جميع الخانات بالكامل بعد الإرسال
+                st.session_state.input_item_number = ""
+                st.session_state.input_nupco_number = ""
+                st.session_state.input_item_name = ""
+                st.session_state.input_e_market = ""
+                st.session_state.input_unit_price = 0.0
+                st.session_state.input_quantity = 1
+                st.session_state.input_reason = ""
+                if "selected_item_direct" in st.session_state:
+                    st.session_state.selected_item_direct = "-- اختر أو ابحث باسم الصنف / نوبكو / البند --"
+                
+                st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ جميع الخانات لتقديم طلب جديد!")
+                st.rerun()
 
         st.markdown("---")
-        
-        with st.form("purchase_form"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                item_number = st.text_input("1. رقم البند *", value=st.session_state.input_item_number)
-                nupco_number = st.text_input("2. رقم نوبكو *", value=st.session_state.input_nupco_number)
-                e_market_code = st.text_input("3. كود السوق الالكتروني *")
-            with col2:
-                item_name = st.text_input("4. اسم الصنف *", value=st.session_state.input_item_name)
-                unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0)
-                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1)
-            with col3:
-                importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-                reason = st.text_area("8. السبب / المبررات (اختياري)")
-            
-            total_cost = unit_price * quantity
-            st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
-            
-            submit_order = st.form_submit_button("إرسال الطلب")
-            if submit_order:
-                if not item_number.strip():
-                    st.error("❌ حقل 'رقم البند' إلزامي.")
-                elif not nupco_number.strip():
-                    st.error("❌ حقل 'رقم نوبكو' إلزامي.")
-                elif not e_market_code.strip():
-                    st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
-                elif not item_name.strip():
-                    st.error("❌ حقل 'اسم الصنف' إلزامي.")
-                elif unit_price <= 0:
-                    st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
-                elif quantity <= 0:
-                    st.error("❌ يرجى إدخال 'كمية' أعلى من الصفر.")
-                else:
-                    conn = get_db()
-                    c = conn.cursor()
-                    c.execute('''
-                        INSERT INTO purchases (
-                            requester, item_number, nupco_number, e_market_code, 
-                            item_name, unit_price, quantity, total_cost, 
-                            importance_criteria, reason, status, created_at, reviewed_at, approved_at, edit_history
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
-                    ''', (
-                        st.session_state.username, item_number, nupco_number, e_market_code, 
-                        item_name, unit_price, quantity, total_cost, 
-                        importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
-                    ))
-                    conn.commit()
-                    conn.close()
-                    
-                    st.session_state.input_item_number = ""
-                    st.session_state.input_nupco_number = ""
-                    st.session_state.input_item_name = ""
-                    
-                    st.success("✅ تم إرسال طلب الشراء بنجاح!")
-                    st.rerun()
-
         st.subheader("📋 سجل طلباتك السابقة ومواعيد الاعتماد")
         conn = get_db()
         df_my_orders = pd.read_sql_query('''
