@@ -614,25 +614,44 @@ else:
                             st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
-    # ==================== الشاشة الرابعة (مع ميزة حذف المستخدمين) ====================
+    # ==================== الشاشة الرابعة (مع زر الحذف بجوار كل مستخدم مباشرة) ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
         st.header("⚙️ الشاشة الرابعة: إعدادات المستخدمين وإدارة الصلاحيات وحذف المستخدمين")
-        
-        conn = get_db()
-        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
-        conn.close()
-        
-        st.subheader("قائمة كافة المستخدمين وحساباتهم")
-        st.dataframe(users_df, use_container_width=True)
-        
-        st.markdown("---")
-        st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
         
         conn = get_db()
         c = conn.cursor()
         c.execute("SELECT username, roles, status FROM users")
         all_users_data = c.fetchall()
         conn.close()
+        
+        st.subheader("📋 قائمة المستخدمين (مع خيار الحذف والتعديل المباشر بجوار كل مستخدم)")
+        
+        for u in all_users_data:
+            u_name = u[0]
+            u_roles = u[1]
+            u_status = u[2]
+            
+            with st.container():
+                col_info, col_del = st.columns([5, 1])
+                with col_info:
+                    st.markdown(f"👤 **المستخدم:** `{u_name}` | **الصلاحيات:** {u_roles} | **الحالة:** `{u_status}`")
+                with col_del:
+                    if st.button("🗑️ حذف", key=f"del_btn_{u_name}", type="secondary"):
+                        if u_name == "admin":
+                            st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
+                        elif u_name == st.session_state.username:
+                            st.error("❌ لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول به.")
+                        else:
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("DELETE FROM users WHERE username = ?", (u_name,))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"✅ تم حذف المستخدم ({u_name}) بنجاح!")
+                            st.rerun()
+                st.markdown("---")
+        
+        st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
         
         usernames_list = [u[0] for u in all_users_data]
         selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
@@ -670,26 +689,6 @@ else:
                         st.rerun()
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
-
-        st.markdown("---")
-        st.subheader("🗑️ حذف مستخدم من النظام")
-        with st.form("delete_user_form"):
-            user_to_delete = st.selectbox("اختر اسم المستخدم للحذف", usernames_list, key="del_user_select")
-            submit_delete = st.form_submit_button("حذف المستخدم المحدد", type="primary")
-            
-            if submit_delete:
-                if user_to_delete == "admin":
-                    st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
-                elif user_to_delete == st.session_state.username:
-                    st.error("❌ لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول به.")
-                else:
-                    conn = get_db()
-                    c = conn.cursor()
-                    c.execute("DELETE FROM users WHERE username = ?", (user_to_delete,))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"✅ تم حذف المستخدم ({user_to_delete}) بنجاح!")
-                    st.rerun()
 
     # ==================== الشاشة الخامسة (الداش بورد التفصيلية لكل مرحلة) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
