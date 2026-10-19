@@ -148,41 +148,50 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-# تهيئة حقول الاختيار والمزامنة
-if 'selected_item_num' not in st.session_state:
-    st.session_state.selected_item_num = ""
-if 'selected_nupco_num' not in st.session_state:
-    st.session_state.selected_nupco_num = ""
-if 'selected_item_name' not in st.session_state:
-    st.session_state.selected_item_name = ""
+# عداد المفاتيح لضمان إعادة تنشيط المزامنة الحقيقية في Streamlit
+if 'form_counter' not in st.session_state:
+    st.session_state.form_counter = 0
 
-# --- دوال المزامنة التلقائية والربط اللحظي المباشر ---
-def on_select_item_num():
-    val = st.session_state.get('key_sb_item_num', '')
-    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
+if 'sel_item_num' not in st.session_state:
+    st.session_state.sel_item_num = "-- اختر أو ابحث --"
+if 'sel_nupco_num' not in st.session_state:
+    st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
+if 'sel_item_name' not in st.session_state:
+    st.session_state.sel_item_name = "-- اختر أو ابحث --"
+
+# --- دوال المزامنة الحقيقية والمباشرة ---
+def sync_item_num_changed():
+    current_key = f"sb_item_num_{st.session_state.form_counter}"
+    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
+    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['رقم البند'] == str(val).strip()]
         if not m.empty:
-            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.form_counter += 1
 
-def on_select_nupco():
-    val = st.session_state.get('key_sb_nupco', '')
-    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
+def sync_nupco_changed():
+    current_key = f"sb_nupco_{st.session_state.form_counter}"
+    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
+    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['رقم نوبكو'] == str(val).strip()]
         if not m.empty:
-            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.form_counter += 1
 
-def on_select_item_name():
-    val = st.session_state.get('key_sb_item_name', '')
-    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
+def sync_name_changed():
+    current_key = f"sb_name_{st.session_state.form_counter}"
+    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
+    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['اسم الصنف'] == str(val).strip()]
         if not m.empty:
-            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.form_counter += 1
 
 # --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
@@ -314,7 +323,7 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (المزامنة اللحظية والبحث بنفس الخانة) ====================
+    # ==================== الشاشة الأولى (المزامنة اللحظية الحقيقية) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
@@ -322,10 +331,12 @@ else:
         list_nupco = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
         list_names = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
 
-        # حساب الفهرس الحالي لضمان انعكاس التغييرات والمزامنة التلقائية فوراً
-        idx_item = list_items.index(st.session_state.selected_item_num) if st.session_state.selected_item_num in list_items else 0
-        idx_nupco = list_nupco.index(st.session_state.selected_nupco_num) if st.session_state.selected_nupco_num in list_nupco else 0
-        idx_name = list_names.index(st.session_state.selected_item_name) if st.session_state.selected_item_name in list_names else 0
+        # استخراج الفهرس الحالي لربط الواجهة بقيمة Session State الحالية
+        idx_item = list_items.index(st.session_state.sel_item_num) if st.session_state.sel_item_num in list_items else 0
+        idx_nupco = list_nupco.index(st.session_state.sel_nupco_num) if st.session_state.sel_nupco_num in list_nupco else 0
+        idx_name = list_names.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in list_names else 0
+
+        cnt = st.session_state.form_counter
 
         col1, col2, col3 = st.columns(3)
         
@@ -334,16 +345,16 @@ else:
                 "1. رقم البند (ابحث أو اختر) *",
                 options=list_items,
                 index=idx_item,
-                key="key_sb_item_num",
-                on_change=on_select_item_num
+                key=f"sb_item_num_{cnt}",
+                on_change=sync_item_num_changed
             )
             
             nupco_num_val = st.selectbox(
                 "2. رقم نوبكو (ابحث أو اختر) *",
                 options=list_nupco,
                 index=idx_nupco,
-                key="key_sb_nupco",
-                on_change=on_select_nupco
+                key=f"sb_nupco_{cnt}",
+                on_change=sync_nupco_changed
             )
             
             e_market_code = st.text_input("3. كود السوق الالكتروني *", key="input_e_market")
@@ -353,8 +364,8 @@ else:
                 "4. اسم الصنف (ابحث أو اختر) *",
                 options=list_names,
                 index=idx_name,
-                key="key_sb_item_name",
-                on_change=on_select_item_name
+                key=f"sb_name_{cnt}",
+                on_change=sync_name_changed
             )
             
             unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, key="input_unit_price")
@@ -402,10 +413,11 @@ else:
                 conn.commit()
                 conn.close()
                 
-                # إرجاع الخانات للحالة الافتراضية بعد الإرسال
-                st.session_state.selected_item_num = ""
-                st.session_state.selected_nupco_num = ""
-                st.session_state.selected_item_name = ""
+                # تفريغ الخانات وتجديد العداد
+                st.session_state.sel_item_num = "-- اختر أو ابحث --"
+                st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
+                st.session_state.sel_item_name = "-- اختر أو ابحث --"
+                st.session_state.form_counter += 1
                 
                 st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ الخانات لتقديم طلب جديد!")
                 st.rerun()
