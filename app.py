@@ -12,11 +12,12 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# --- تهيئة قاعدة البيانات ---
+# --- تهيئة وتحديث قاعدة البيانات تلقائياً ---
 def init_db():
     conn = sqlite3.connect('purchase_system.db', check_same_thread=False)
     cursor = conn.cursor()
     
+    # إنشاء جدول المستخدمين إن لم يكن موجوداً
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -26,6 +27,16 @@ def init_db():
         )
     ''')
     
+    # التحقق من وجود عمود roles وتحديثه إذا كانت القاعدة قديمة
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'roles' not in columns:
+        if 'role' in columns:
+            cursor.execute("ALTER TABLE users RENAME COLUMN role TO roles")
+        else:
+            cursor.execute("ALTER TABLE users ADD COLUMN roles TEXT")
+            
+    # إنشاء جدول طلبات الشراء إن لم يكن موجوداً
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS purchases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +58,12 @@ def init_db():
         )
     ''')
     
+    # التحقق من وجود عمود edit_history وتحديثه إذا كان غير موجود
+    cursor.execute("PRAGMA table_info(purchases)")
+    p_columns = [column[1] for column in cursor.fetchall()]
+    if 'edit_history' not in p_columns:
+        cursor.execute("ALTER TABLE purchases ADD COLUMN edit_history TEXT")
+
     # التأكد من وجود حساب الـ admin الافتراضي بصلاحيات كاملة
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
