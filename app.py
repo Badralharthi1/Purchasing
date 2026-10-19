@@ -5,28 +5,16 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# --- إعداد الصفحة والتصميم الخاص للألوان والخطوط ---
+# --- إعداد الصفحة والتصميم الأساسي ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# تطبيق أنماط CSS مخصصة لتنسيق الخطوط والعناوين
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Traditional Arabic', 'Amiri', serif;
-        font-size: 1.15rem;
-    }
-    
-    h1, h2, h3, .main-title {
-        font-family: 'Cairo', sans-serif !important;
-        font-weight: bold;
-    }
-    
     .main-title {
         text-align: center;
         color: #0073e6;
-        font-size: 2.4rem;
+        font-size: 2.2rem;
+        font-weight: bold;
         margin-top: 10px;
         margin-bottom: 25px;
     }
@@ -34,13 +22,11 @@ st.markdown("""
     .stButton>button {
         border-radius: 8px;
         font-weight: bold;
-        font-family: 'Cairo', sans-serif;
     }
     
     [data-testid="stMetricValue"] {
         font-size: 1.8rem;
         color: #0A4D68;
-        font-family: 'Cairo', sans-serif;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -614,9 +600,9 @@ else:
                             st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
-    # ==================== الشاشة الرابعة (مع زر الحذف بجوار كل مستخدم مباشرة) ====================
+    # ==================== الشاشة الرابعة (جدول المستخدمين مع زر الحذف أمام كل مستخدم) ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
-        st.header("⚙️ الشاشة الرابعة: إعدادات المستخدمين وإدارة الصلاحيات وحذف المستخدمين")
+        st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
         
         conn = get_db()
         c = conn.cursor()
@@ -624,23 +610,33 @@ else:
         all_users_data = c.fetchall()
         conn.close()
         
-        st.subheader("📋 قائمة المستخدمين (مع خيار الحذف والتعديل المباشر بجوار كل مستخدم)")
+        st.subheader("📋 جدول المستخدمين الحاليين")
         
-        for u in all_users_data:
-            u_name = u[0]
-            u_roles = u[1]
-            u_status = u[2]
+        # إنشاء جدول منسق لعرض المستخدمين مع زر الحذف أمام كل مستخدم
+        if all_users_data:
+            header_col1, header_col2, header_col3, header_col4 = st.columns([2, 3, 2, 1])
+            header_col1.markdown("**اسم المستخدم**")
+            header_col2.markdown("**الصلاحيات**")
+            header_col3.markdown("**الحالة**")
+            header_col4.markdown("**إجراء الحذف**")
+            st.markdown("---")
             
-            with st.container():
-                col_info, col_del = st.columns([5, 1])
-                with col_info:
-                    st.markdown(f"👤 **المستخدم:** `{u_name}` | **الصلاحيات:** {u_roles} | **الحالة:** `{u_status}`")
-                with col_del:
-                    if st.button("🗑️ حذف", key=f"del_btn_{u_name}", type="secondary"):
+            for u in all_users_data:
+                u_name = u[0]
+                u_roles = u[1]
+                u_status = u[2]
+                
+                row_col1, row_col2, row_col3, row_col4 = st.columns([2, 3, 2, 1])
+                row_col1.write(u_name)
+                row_col2.write(u_roles)
+                row_col3.write(u_status)
+                
+                with row_col4:
+                    if st.button("🗑️ حذف", key=f"table_del_{u_name}", type="secondary"):
                         if u_name == "admin":
                             st.error("❌ لا يمكن حذف حساب المدير الأساسي (admin).")
                         elif u_name == st.session_state.username:
-                            st.error("❌ لا يمكنك حذف حسابك الحالي أثناء تسجيل الدخول به.")
+                            st.error("❌ لا يمكنك حذف حسابك الحالي.")
                         else:
                             conn = get_db()
                             c = conn.cursor()
@@ -650,6 +646,8 @@ else:
                             st.success(f"✅ تم حذف المستخدم ({u_name}) بنجاح!")
                             st.rerun()
                 st.markdown("---")
+        else:
+            st.info("لا توجد حسابات مستخدمين مسجلة.")
         
         st.subheader("👤 تعديل صلاحيات وحالة مستخدم مباشرة")
         
