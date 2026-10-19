@@ -2,7 +2,6 @@ import sqlite3
 import hashlib
 import io
 import sys
-import base64
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -10,28 +9,7 @@ from datetime import datetime
 # --- إعداد الصفحة والتصميم الخاص للألوان ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# الشعار الجديد المحدث مدمج كـ Base64 لضمان الظهور الفوري والدائم بدون ملفات خارجية
-LOGO_BASE64 = """iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAACXBIWXMAAAsTAAALEwEAmpwY
-AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAA0NSURBVHgB7Z17iB1FFcc/m7S2
-iVGTh0l9Y21E8RGN1mghKhq18REI+k/9I/qA+AdasYrG3ajRR8QH8S3aGBXfVYw+1EZb
-Y4woamx8Y42vjc/4jInpTf/OvXf32f3t3j2zu3O/M3A/uXf3dmbmzpzzm53d2UUpCIIg
-CAJn/J953s/zXsy43s1f/1z4f91e/w6y3v2z2uL17d744m+7v/N6/Wp3EIIgtBhO
-1/r3xL/L/E7p3L/vO0n48k34YglfuY43xR83xL+3w6+L32jT6z6xR61l4m0SAnGq
-I4L0223w1f/3U1f3c3f3U1f/3/1c8f/23/1v4v+18d9q14i3I/67pP4i/q12h4m33
-3x/6/3u030f8j8E4v/Ufe6f8L+L35f8r0p8A/839/098bvdYfb449f8D+Pvd9
-I3EIn90/0v/r92jXgd938L32jX/1x15yI/38Tfdn3/9u9JmN/8
-/.../"""
-
-# كود تحويل الشعار للعرض المباشر
-def get_embedded_logo_html(width=220):
-    try:
-        with open("logo.png", "rb") as image_file:
-            encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-            return f'<img src="data:image/jpeg;base64,{encoded_string}" width="{width}">'
-    except FileNotFoundError:
-        return f'<img src="data:image/jpeg;base64,{LOGO_BASE64}" width="{width}">'
-
-# تطبيق أنماط CSS مخصصة لتنسيق الواجهة
+# تطبيق أنماط CSS مخصصة لتنسيق الواجهة وجعلها جذابة
 st.markdown("""
     <style>
     html, body, [class*="css"] {
@@ -45,13 +23,6 @@ st.markdown("""
         font-weight: bold;
         margin-top: 10px;
         margin-bottom: 25px;
-    }
-    
-    .logo-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-bottom: 15px;
     }
     
     .stButton>button {
@@ -140,19 +111,16 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
+# --- دالة تصدير إكسل حقيقي ونقي ومستقر (.xlsx) ---
 def to_excel_bytes(df):
     output = io.BytesIO()
-    engine_to_use = 'xlsxwriter' if 'xlsxwriter' in sys.modules else 'openpyxl' if 'openpyxl' in sys.modules else None
-    if engine_to_use:
-        with pd.ExcelWriter(output, engine=engine_to_use) as writer:
-            df.to_excel(writer, index=False, sheet_name='الطلبات المعتمدة')
-        return output.getvalue()
-    else:
-        return df.to_html(index=False).encode('utf-8-sig')
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='الطلبات المعتمدة')
+    processed_data = output.getvalue()
+    return processed_data
 
 # ==================== واجهة تسجيل الدخول والتسجيل ====================
 if not st.session_state.logged_in:
-    st.markdown(f'<div class="logo-container">{get_embedded_logo_html(240)}</div>', unsafe_allow_html=True)
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
     st.markdown("---")
     
@@ -212,8 +180,6 @@ if not st.session_state.logged_in:
 
 # ==================== الواجهة الرئيسية بعد تسجيل الدخول ====================
 else:
-    st.sidebar.markdown(f'<div class="logo-container">{get_embedded_logo_html(200)}</div>', unsafe_allow_html=True)
-    st.sidebar.markdown("---")
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"الصلاحيات: **{', '.join(st.session_state.user_roles)}**")
@@ -480,7 +446,7 @@ else:
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel (.xlsx)",
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel حقيقي (.xlsx)",
                 data=excel_bytes,
                 file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
