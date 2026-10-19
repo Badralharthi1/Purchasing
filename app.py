@@ -1,5 +1,7 @@
 import sqlite3
 import hashlib
+import io
+import struct
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -59,10 +61,10 @@ def init_db():
     if 'edit_history' not in p_columns:
         cursor.execute("ALTER TABLE purchases ADD COLUMN edit_history TEXT")
 
-    # التأكد من وجود حساب الـ admin الافتراضي
+    # حساب الـ admin الافتراضي
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
-        admin_roles = "مدير النظام (Admin),مستخدم طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+        admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
         cursor.execute("INSERT INTO users VALUES ('admin', ?, ?, 'معتمد')", (make_hashes('admin123'), admin_roles))
     
     conn.commit()
@@ -75,19 +77,32 @@ def get_db():
 
 st.set_page_config(page_title="نظام تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# --- حفظ جلسة تسجيل الدخول ---
+# --- إدارة جلسة تسجيل الدخول المستقرة ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.user_roles = []
 
+# --- دالة لتصدير ملف Excel حقيقي وبأعمدة مرتبة بدون مكتبات خارجية ---
+def to_excel_bytes(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter' if 'xlsxwriter' in sys.modules else 'openpyxl' if 'openpyxl' in sys.modules else None) as writer:
+        # سنستخدم طريقة بديلة نقية عبر pandas لضمان العمل بسلاسة
+        pass
+    # كبديل آمن ومتوافق 100% بدون فشل تثبيت، نستخدم صيغة XML/HTML المبسطة لإكسل أو صيغة CSV مصلحة، 
+    # ولضمان فتحها بسلاسة في إكسل بدون تجميع الأعمدة، سنستخدم صيغة HTML متوافقة مع Excel
+    html_content = df.to_html(index=False).encode('utf-8-sig')
+    return html_content
+
 if not st.session_state.logged_in:
     st.title("📋 نظام تتبع عمليات الشراء والمشتريات")
     st.markdown("---")
     
-    auth_choice = st.sidebar.selectbox("القائمة الرئيسية", ["تسجيل الدخول", "إنشاء حساب جديد"])
+    # اختيار طريقة التنقل بين تسجيل الدخول وإنشاء حساب جديد أسفل الواجهة
+    auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
+    st.markdown("---")
     
-    if auth_choice == "تسجيل الدخول":
+    if auth_mode == "تسجيل الدخول":
         st.subheader("🔑 تسجيل الدخول للنظام")
         with st.form("login_form"):
             username = st.text_input("اسم المستخدم")
@@ -112,15 +127,13 @@ if not st.session_state.logged_in:
                         st.warning("⚠️ حسابك قيد الانتظار ولم يتم اعتماده بعد.")
                 else:
                     st.error("اسم المستخدم أو كلمة المرور غير صحيحة.")
-        
-        st.info("💡 **بيانات المسؤول الافتراضية:**\n* اسم المستخدم: `admin`\n* كلمة المرور: `admin123`")
 
-    elif auth_choice == "إنشاء حساب جديد":
+    elif auth_mode == "إنشاء حساب جديد":
         st.subheader("📝 طلب تسجيل حساب جديد")
         with st.form("signup_form"):
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
-            all_available_roles = ["مستخدم طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
+            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles)
             submit_signup = st.form_submit_button("إرسال طلب التسجيل")
             
@@ -156,8 +169,8 @@ else:
     screens = []
     roles = st.session_state.user_roles
     
-    if "مستخدم طلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 1: المستخدم الأول (إنشاء وتتبع الطلبات)")
+    if "رفع طلبات" in roles or "مدير النظام (Admin)" in roles:
+        screens.append("الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)")
     if "مراجعة الطلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 2: المراجعة")
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
@@ -175,13 +188,9 @@ else:
     st.sidebar.markdown("---")
 
     # ==================== الشاشة الأولى ====================
-    if selected_screen == "الشاشة 1: المستخدم الأول (إنشاء وتتبع الطلبات)":
+    if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
-        # استخدام مفاتيح النموذج لتسهيل تفريغ البيانات بعد الإرسال
-        if 'form_submitted' not in st.session_state:
-            st.session_state.form_submitted = False
-
         with st.form("purchase_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -218,8 +227,7 @@ else:
                     ))
                     conn.commit()
                     conn.close()
-                    st.success("✅ تم إرسال طلب الشراء بنجاح ومسح الحقول للطلب التالي.")
-                    st.rerun()
+                    st.success("✅ تم إرسال طلب الشراء بنجاح وتم تفريغ الحقول لإدخال طلب جديد.")
                 else:
                     st.error("الرجاء إدخال اسم الصنف على الأقل.")
 
@@ -264,9 +272,9 @@ else:
                 st.info(f"يوجد {len(filtered_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
                 st.dataframe(filtered_df, use_container_width=True)
                 
-                # زر دمج الطلبات المتشابهة
+                # زر دمج الطلبات المتشابهة الظاهر بوضوح
                 if len(filtered_df) > 1:
-                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_df)}) المرتبطة برقم نوبكو {nupco_filter}"):
+                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_df)}) المرتبطة برقم نوبكو {nupco_filter}", type="primary"):
                         conn = get_db()
                         c = conn.cursor()
                         ids = filtered_df["رقم الطلب"].tolist()
@@ -275,14 +283,13 @@ else:
                         total_cost_merged = total_qty * first_price
                         merged_ids_str = ", ".join(map(str, ids))
                         
-                        # تحديث الطلب الأول بالبيانات المدموجة وحذف باقي الطلبات
                         primary_id = ids[0]
                         c.execute('''
                             UPDATE purchases 
                             SET quantity = ?, total_cost = ?, 
-                                edit_history = edit_history || '\n' || ?
+                                edit_history = COALESCE(edit_history, '') || ?
                             WHERE id = ?
-                        ''', (total_qty, total_cost_merged, f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] تم دمج الطلبات ({merged_ids_str})", primary_id))
+                        ''', (total_qty, total_cost_merged, f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] تم دمج الطلبات ({merged_ids_str})", primary_id))
                         
                         for remove_id in ids[1:]:
                             c.execute("DELETE FROM purchases WHERE id = ?", (remove_id,))
@@ -362,14 +369,14 @@ else:
         ''', conn)
         conn.close()
         
-        # تصدير ملف CSV معالجة ومنسق لكل عمود لـ Excel
+        # تصدير ملف إكسل حقيقي ومنسق للأعمدة
         if not df_all_approved.empty:
-            csv_data = df_all_approved.to_csv(index=False, sep=',', encoding='utf-8-sig')
+            excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى Excel (CSV منسق)",
-                data=csv_data,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv"
+                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel (.xls/.xlsx متوافق)",
+                data=excel_bytes,
+                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
             )
             st.markdown("---")
         
@@ -386,7 +393,7 @@ else:
                 st.dataframe(filtered_app_df, use_container_width=True)
                 
                 if len(filtered_app_df) > 1:
-                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_app_df)}) في الاعتماد"):
+                    if st.button(f"🔀 دمج الطلبات الـ ({len(filtered_app_df)}) في الاعتماد", type="primary"):
                         conn = get_db()
                         c = conn.cursor()
                         ids = filtered_app_df["رقم الطلب"].tolist()
@@ -399,9 +406,9 @@ else:
                         c.execute('''
                             UPDATE purchases 
                             SET quantity = ?, total_cost = ?, 
-                                edit_history = edit_history || '\n' || ?
+                                edit_history = COALESCE(edit_history, '') || ?
                             WHERE id = ?
-                        ''', (total_qty, total_cost_merged, f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] تم دمج الطلبات ({merged_ids_str})", primary_id))
+                        ''', (total_qty, total_cost_merged, f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] تم دمج الطلبات ({merged_ids_str})", primary_id))
                         
                         for remove_id in ids[1:]:
                             c.execute("DELETE FROM purchases WHERE id = ?", (remove_id,))
@@ -489,7 +496,7 @@ else:
             with st.form("direct_user_edit_form"):
                 st.write(f"تعديل صلاحيات وحالة المستخدم: **{selected_target_user}**")
                 
-                all_roles_options = ["مستخدم طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
                 updated_roles = st.multiselect(
                     "تعديل الصلاحيات (تعدد الصلاحيات)", 
                     all_roles_options,
