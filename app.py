@@ -5,22 +5,18 @@ import sys
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+from PIL import Image
 
 # --- إعداد الصفحة والتصميم الخاص للألوان ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
-# رابط الشعار لتجمع الطائف الصحي
-LOGO_URL = "https://raw.githubusercontent.com/aztreonam/purchasing/main/logo.png"
-
 # تطبيق أنماط CSS مخصصة لجعل الواجهة جذابة ومتناسقة
 st.markdown("""
     <style>
-    /* تحسين الخطوط والتصميم العام */
     html, body, [class*="css"] {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* تنسيق العنوان الرئيسي المتمركز */
     .main-title {
         text-align: center;
         color: #0073e6;
@@ -30,7 +26,6 @@ st.markdown("""
         margin-bottom: 25px;
     }
     
-    /* حاوية الشعار */
     .logo-container {
         display: flex;
         justify-content: center;
@@ -38,19 +33,28 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* تصميم البطاقات والتحسينات البصرية */
     .stButton>button {
         border-radius: 8px;
         font-weight: bold;
     }
     
-    /* تحسين البطاقات الاحصائية */
     [data-testid="stMetricValue"] {
         font-size: 1.8rem;
         color: #0A4D68;
     }
     </style>
 """, unsafe_allow_html=True)
+
+# --- محاولة تحميل الشعار محلياً أو من مسار المشروع ---
+@st.cache_resource
+def load_logo():
+    try:
+        # ابحث عن ملف باسم logo.png في نفس المجلد
+        return Image.open("logo.png")
+    except:
+        return None
+
+logo_img = load_logo()
 
 # --- إعدادات وتشفير كلمات المرور ---
 def make_hashes(password):
@@ -107,7 +111,6 @@ def init_db():
     if 'edit_history' not in p_columns:
         cursor.execute("ALTER TABLE purchases ADD COLUMN edit_history TEXT")
 
-    # حساب الـ admin الافتراضي
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
@@ -127,7 +130,6 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة لتصدير ملف Excel حقيقي وبأعمدة مرتبة ---
 def to_excel_bytes(df):
     output = io.BytesIO()
     engine_to_use = 'xlsxwriter' if 'xlsxwriter' in sys.modules else 'openpyxl' if 'openpyxl' in sys.modules else None
@@ -140,8 +142,11 @@ def to_excel_bytes(df):
 
 # ==================== واجهة تسجيل الدخول والتسجيل ====================
 if not st.session_state.logged_in:
-    # عرض الشعار بالمنتصف في صفحة الدخول
-    st.markdown(f'<div class="logo-container"><img src="{LOGO_URL}" width="220"></div>', unsafe_allow_html=True)
+    if logo_img:
+        col1, col2, col3 = st.columns([1, 1.2, 1])
+        with col2:
+            st.image(logo_img, width=240)
+    
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
     st.markdown("---")
     
@@ -201,14 +206,13 @@ if not st.session_state.logged_in:
 
 # ==================== الواجهة الرئيسية بعد تسجيل الدخول ====================
 else:
-    # الشعار ثابت في الشريط الجانبي
-    st.sidebar.image(LOGO_URL, use_container_width=True)
+    if logo_img:
+        st.sidebar.image(logo_img, use_container_width=True)
     st.sidebar.markdown("---")
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"الصلاحيات: **{', '.join(st.session_state.user_roles)}**")
     
-    # خيار لتغيير كلمة المرور داخل الشريط الجانبي
     with st.sidebar.expander("🔒 تغيير كلمة المرور"):
         with st.form("change_password_form"):
             curr_pass = st.text_input("كلمة المرور الحالية", type="password")
@@ -263,7 +267,6 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    # العنوان الرئيسي متمركز وموحد أعلى كل شاشة
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
