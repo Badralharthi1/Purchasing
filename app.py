@@ -883,26 +883,41 @@ else:
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
 
-    # ==================== الشاشة الخامسة ====================
+    # ==================== الشاشة الخامسة (لوحة التحكم والتقارير) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
         st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
         
         conn = get_db()
-        df_all = pd.read_sql_query("SELECT * FROM purchases", conn)
-        users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', hospital AS 'المستشفى', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
+        # سحب جدول الطلبات مع تعريب أسماء الأعمدة بشكل كامل
+        df_all = pd.read_sql_query('''
+            SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
+                   nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", 
+                   unit_price AS "السعر الأفرادي", quantity AS "الكمية", total_cost AS "الإجمالي", 
+                   importance_criteria AS "معيار الأهمية", reason AS "السبب", status AS "الحالة", 
+                   created_at AS "تاريخ الإنشاء", reviewed_at AS "تاريخ المراجعة", 
+                   approved_at AS "تاريخ الاعتماد النهائي", reviewer_notes AS "ملاحظات المراجعة", 
+                   approver_notes AS "ملاحظات الاعتماد", edit_history AS "سجل التعديلات" 
+            FROM purchases
+        ''', conn)
+        
+        # سحب جدول المستخدمين مع تعريب أعمدته بالكامل
+        users_df = pd.read_sql_query('''
+            SELECT username AS "اسم المستخدم", hospital AS "المستشفى", roles AS "الصلاحيات", status AS "الحالة" 
+            FROM users
+        ''', conn)
         conn.close()
         
         dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
         
         if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
-            df_all = df_all[df_all['hospital'] == dash_hosp_filter]
+            df_all = df_all[df_all['المستشفى'] == dash_hosp_filter]
         
-        df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
-        df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
-        df_review_rejected = df_all[df_all['status'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
+        df_review_pending = df_all[df_all['الحالة'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
+        df_review_approved = df_all[(df_all['الحالة'] == 'بانتظار الاعتماد') | (df_all['الحالة'] == 'معتمد نهائياً') | (df_all['الحالة'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
+        df_review_rejected = df_all[df_all['الحالة'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
         
-        df_final_approved = df_all[df_all['status'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
-        df_final_rejected = df_all[df_all['status'] == 'مرفوض نهائياً'] if not df_all.empty else pd.DataFrame()
+        df_final_approved = df_all[df_all['الحالة'] == 'معتمد نهائياً'] if not df_all.empty else pd.DataFrame()
+        df_final_rejected = df_all[df_all['الحالة'] == 'مرفوض نهائياً'] if not df_all.empty else pd.DataFrame()
         
         st.subheader("📌 إحصائيات مرحلة المراجعة")
         rc1, rc2, rc3 = st.columns(3)
@@ -914,7 +929,7 @@ else:
         
         st.subheader("📌 إحصائيات مرحلة الاعتماد النهائي")
         fc1, fc2, fc3 = st.columns(3)
-        fc1.metric("⏳ طلبات بانتظار الاعتماد النهائي", len(df_all[df_all['status'] == 'بانتظار الاعتماد']) if not df_all.empty else 0)
+        fc1.metric("⏳ طلبات بانتظار الاعتماد النهائي", len(df_all[df_all['الحالة'] == 'بانتظار الاعتماد']) if not df_all.empty else 0)
         fc2.metric("✅ طلبات معتمدة نهائياً", len(df_final_approved))
         fc3.metric("🚫 طلبات مرفوضة نهائياً", len(df_final_rejected))
         
@@ -929,7 +944,7 @@ else:
         st.markdown("---")
         
         st.subheader("⏳ تفاصيل مرحلة: بانتظار الاعتماد النهائي")
-        df_wait = df_all[df_all['status'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
+        df_wait = df_all[df_all['الحالة'] == 'بانتظار الاعتماد'] if not df_all.empty else pd.DataFrame()
         if not df_wait.empty:
             st.dataframe(df_wait, use_container_width=True)
         else:
@@ -939,7 +954,7 @@ else:
         
         st.subheader("✅ تفاصيل مرحلة: الطلبات المعتمدة نهائياً")
         if not df_final_approved.empty:
-            total_approved_cost = df_final_approved['total_cost'].sum()
+            total_approved_cost = df_final_approved['الإجمالي'].sum()
             st.metric("💰 إجمالي تكلفة الطلبات المعتمدة نهائياً", f"{total_approved_cost:,.2f} ر.س")
             st.dataframe(df_final_approved, use_container_width=True)
         else:
