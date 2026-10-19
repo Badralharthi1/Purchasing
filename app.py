@@ -1,18 +1,18 @@
 import sqlite3
 import hashlib
 import io
+import os
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# --- إعداد الصفحة والتصميم الأساسي (مع تكبير الخطوط الفرعية والنصوص) ---
+# --- إعداد الصفحة والتصميم الأساسي ---
 st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
 
 st.markdown("""
     <style>
-    /* تكبير الخطوط الفرعية والنصوص العامة */
     html, body, [class*="css"] {
-        font-size: 1.15rem; /* زيادة حجم الخط الفرعي والنصي */
+        font-size: 1.15rem;
     }
     
     .main-title {
@@ -35,6 +35,24 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# --- تحميل ملف الإكسل المرجعي ---
+@st.cache_data
+def load_items_catalog():
+    file_path = "استهلاك كل قسم على حدا.xlsx"
+    if os.path.exists(file_path):
+        df = pd.read_excel(file_path)
+        # تنظيف وتحويل الأعمدة لنصوص
+        df['رقم نوبكو'] = df['رقم نوبكو'].astype(str).str.strip()
+        df['اسم الصنف'] = df['اسم الصنف'].astype(str).str.strip()
+        df['رقم البند'] = df['رقم البند'].fillna('').astype(str).str.strip()
+        
+        # إنشاء عمود البحث المدمج للاختيار السهل
+        df['display_label'] = df['اسم الصنف'] + " | نوبكو: " + df['رقم نوبكو'] + " | بند: " + df['رقم البند']
+        return df
+    return pd.DataFrame()
+
+catalog_df = load_items_catalog()
 
 # --- إعدادات وتشفير كلمات المرور ---
 def make_hashes(password):
@@ -116,7 +134,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة تصدير إكسل آمنة ومستقرة 100% ---
+# --- دالة تصدير إكسل آمنة ومستقرة ---
 def to_excel_bytes(df):
     html_content = df.to_html(index=False).encode('utf-8-sig')
     return html_content
@@ -242,18 +260,37 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى ====================
+    # ==================== الشاشة الأولى (مع الاختيار الذكي من ملف الإكسل) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
+        sel_item_number = ""
+        sel_nupco_number = ""
+        sel_item_name = ""
+        
+        if not catalog_df.empty:
+            st.subheader("🔍 البحث والتحديد المباشر من ملف أصناف الإكسل")
+            selected_option = st.selectbox(
+                "ابحث واختر الصنف (بالاسم، أو رقم نوبكو، أو رقم البند):",
+                ["-- اختر صنفاً من القائمة أو أدخل يدوياً --"] + catalog_df['display_label'].tolist()
+            )
+            
+            if selected_option != "-- اختر صنفاً من القائمة أو أدخل يدوياً --":
+                matched_row = catalog_df[catalog_df['display_label'] == selected_option].iloc[0]
+                sel_nupco_number = str(matched_row['رقم نوبكو'])
+                sel_item_name = str(matched_row['اسم الصنف'])
+                sel_item_number = str(matched_row['رقم البند'])
+                st.success(f"✅ تم تحديد الصنف: {sel_item_name}")
+
+        st.markdown("---")
         with st.form("purchase_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                item_number = st.text_input("1. رقم البند *")
-                nupco_number = st.text_input("2. رقم نوبكو *")
+                item_number = st.text_input("1. رقم البند *", value=sel_item_number)
+                nupco_number = st.text_input("2. رقم نوبكو *", value=sel_nupco_number)
                 e_market_code = st.text_input("3. كود السوق الالكتروني *")
             with col2:
-                item_name = st.text_input("4. اسم الصنف *")
+                item_name = st.text_input("4. اسم الصنف *", value=sel_item_name)
                 unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0)
                 quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1)
             with col3:
