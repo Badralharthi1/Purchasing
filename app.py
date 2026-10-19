@@ -36,20 +36,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- تحميل ملف الإكسل المرجعي ---
+# --- تحميل ملف الإكسل المرجعي وسحب البيانات ---
 @st.cache_data
 def load_items_catalog():
     file_path = "استهلاك كل قسم على حدا.xlsx"
     if os.path.exists(file_path):
-        df = pd.read_excel(file_path)
-        # تنظيف وتحويل الأعمدة لنصوص
-        df['رقم نوبكو'] = df['رقم نوبكو'].astype(str).str.strip()
-        df['اسم الصنف'] = df['اسم الصنف'].astype(str).str.strip()
-        df['رقم البند'] = df['رقم البند'].fillna('').astype(str).str.strip()
-        
-        # إنشاء عمود البحث المدمج للاختيار السهل
-        df['display_label'] = df['اسم الصنف'] + " | نوبكو: " + df['رقم نوبكو'] + " | بند: " + df['رقم البند']
-        return df
+        try:
+            df = pd.read_excel(file_path)
+            df['رقم نوبكو'] = df['رقم نوبكو'].astype(str).str.strip()
+            df['اسم الصنف'] = df['اسم الصنف'].astype(str).str.strip()
+            df['رقم البند'] = df['رقم البند'].fillna('').astype(str).str.strip()
+            df['display_label'] = df['اسم الصنف'] + " | نوبكو: " + df['رقم نوبكو'] + " | بند: " + df['رقم البند']
+            return df
+        except Exception as e:
+            st.error(f"خطأ في قراءة ملف الإكسل: {e}")
+            return pd.DataFrame()
     return pd.DataFrame()
 
 catalog_df = load_items_catalog()
@@ -128,13 +129,29 @@ init_db()
 def get_db():
     return sqlite3.connect('purchase_system.db', check_same_thread=False)
 
-# --- إدارة جلسة تسجيل الدخول المستقرة ---
+# --- إدارة جلسة العمل وقيم حقول النموذج ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.user_roles = []
 
-# --- دالة تصدير إكسل آمنة ومستقرة ---
+if 'input_item_number' not in st.session_state:
+    st.session_state.input_item_number = ""
+if 'input_nupco_number' not in st.session_state:
+    st.session_state.input_nupco_number = ""
+if 'input_item_name' not in st.session_state:
+    st.session_state.input_item_name = ""
+
+# --- دالة تحديث الحقول عند اختيار صنف من القائمة ---
+def on_select_catalog_item():
+    selected = st.session_state.selected_catalog_option
+    if selected and selected != "-- اختر صنفاً من القائمة أو أدخل يدوياً --":
+        matched_row = catalog_df[catalog_df['display_label'] == selected].iloc[0]
+        st.session_state.input_item_number = str(matched_row['رقم البند'])
+        st.session_state.input_nupco_number = str(matched_row['رقم نوبكو'])
+        st.session_state.input_item_name = str(matched_row['اسم الصنف'])
+
+# --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
     html_content = df.to_html(index=False).encode('utf-8-sig')
     return html_content
@@ -260,37 +277,31 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (مع الاختيار الذكي من ملف الإكسل) ====================
+    # ==================== الشاشة الأولى (تفعيل التعبئة الآلية الفورية) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
-        sel_item_number = ""
-        sel_nupco_number = ""
-        sel_item_name = ""
-        
         if not catalog_df.empty:
-            st.subheader("🔍 البحث والتحديد المباشر من ملف أصناف الإكسل")
-            selected_option = st.selectbox(
+            st.subheader("🔍 البحث والتحديد المباشر من ملف الأصناف")
+            st.selectbox(
                 "ابحث واختر الصنف (بالاسم، أو رقم نوبكو، أو رقم البند):",
-                ["-- اختر صنفاً من القائمة أو أدخل يدوياً --"] + catalog_df['display_label'].tolist()
+                ["-- اختر صنفاً من القائمة أو أدخل يدوياً --"] + catalog_df['display_label'].tolist(),
+                key="selected_catalog_option",
+                on_change=on_select_catalog_item
             )
-            
-            if selected_option != "-- اختر صنفاً من القائمة أو أدخل يدوياً --":
-                matched_row = catalog_df[catalog_df['display_label'] == selected_option].iloc[0]
-                sel_nupco_number = str(matched_row['رقم نوبكو'])
-                sel_item_name = str(matched_row['اسم الصنف'])
-                sel_item_number = str(matched_row['رقم البند'])
-                st.success(f"✅ تم تحديد الصنف: {sel_item_name}")
+        else:
+            st.warning("⚠️ لم يتم العثور على ملف 'استهلاك كل قسم على حدا.xlsx' في مجلد التطبيق.")
 
         st.markdown("---")
-        with st.form("purchase_form", clear_on_submit=True):
+        
+        with st.form("purchase_form"):
             col1, col2, col3 = st.columns(3)
             with col1:
-                item_number = st.text_input("1. رقم البند *", value=sel_item_number)
-                nupco_number = st.text_input("2. رقم نوبكو *", value=sel_nupco_number)
+                item_number = st.text_input("1. رقم البند *", value=st.session_state.input_item_number)
+                nupco_number = st.text_input("2. رقم نوبكو *", value=st.session_state.input_nupco_number)
                 e_market_code = st.text_input("3. كود السوق الالكتروني *")
             with col2:
-                item_name = st.text_input("4. اسم الصنف *", value=sel_item_name)
+                item_name = st.text_input("4. اسم الصنف *", value=st.session_state.input_item_name)
                 unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0)
                 quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1)
             with col3:
@@ -331,7 +342,13 @@ else:
                     ))
                     conn.commit()
                     conn.close()
-                    st.success("✅ تم إرسال طلب الشراء بنجاح وتم تفريغ الحقول لإدخال طلب جديد.")
+                    
+                    # إعادة ضبط حقول نموذج الإدخال بعد النجاح
+                    st.session_state.input_item_number = ""
+                    st.session_state.input_nupco_number = ""
+                    st.session_state.input_item_name = ""
+                    
+                    st.success("✅ تم إرسال طلب الشراء بنجاح!")
                     st.rerun()
 
         st.subheader("📋 سجل طلباتك السابقة ومواعيد الاعتماد")
@@ -642,7 +659,7 @@ else:
                             st.success(f"تم اتخاذ القرار النهائي وتسجيل وقت الاعتماد للطلب رقم {req_id_app}.")
                             st.rerun()
 
-    # ==================== الشاشة الرابعة (جدول المستخدمين مع زر الحذف أمام كل مستخدم) ====================
+    # ==================== الشاشة الرابعة ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
         st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
         
@@ -729,7 +746,7 @@ else:
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
 
-    # ==================== الشاشة الخامسة (الداش بورد التفصيلية لكل مرحلة) ====================
+    # ==================== الشاشة الخامسة (الداش بورد) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
         st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
         
@@ -738,9 +755,7 @@ else:
         users_df = pd.read_sql_query("SELECT username AS 'اسم المستخدم', roles AS 'الصلاحيات', status AS 'الحالة' FROM users", conn)
         conn.close()
         
-        # تقسيم البيانات والتصنيفات بدقة لكل مرحلة
         df_review_pending = df_all[df_all['status'] == 'قيد المراجعة'] if not df_all.empty else pd.DataFrame()
-        
         df_review_approved = df_all[(df_all['status'] == 'بانتظار الاعتماد') | (df_all['status'] == 'معتمد نهائياً') | (df_all['status'] == 'مرفوض نهائياً')] if not df_all.empty else pd.DataFrame()
         df_review_rejected = df_all[df_all['status'] == 'مرفوض في المراجعة'] if not df_all.empty else pd.DataFrame()
         
