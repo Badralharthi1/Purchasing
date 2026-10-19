@@ -148,41 +148,41 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-# التخزين المؤقت لقيم الحقول المختارة
-if 'current_item_num' not in st.session_state:
-    st.session_state.current_item_num = None
-if 'current_nupco_num' not in st.session_state:
-    st.session_state.current_nupco_num = None
-if 'current_item_name' not in st.session_state:
-    st.session_state.current_item_name = None
+# تهيئة حقول الاختيار والمزامنة
+if 'selected_item_num' not in st.session_state:
+    st.session_state.selected_item_num = ""
+if 'selected_nupco_num' not in st.session_state:
+    st.session_state.selected_nupco_num = ""
+if 'selected_item_name' not in st.session_state:
+    st.session_state.selected_item_name = ""
 
-# --- دوال الربط والمزامنة التلقائية المباشرة ---
-def sync_by_item_num():
-    val = st.session_state.sb_item_num_key
-    if val and not catalog_df.empty:
+# --- دوال المزامنة التلقائية والربط اللحظي المباشر ---
+def on_select_item_num():
+    val = st.session_state.get('key_sb_item_num', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['رقم البند'] == str(val).strip()]
         if not m.empty:
-            st.session_state.current_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.current_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.current_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
 
-def sync_by_nupco():
-    val = st.session_state.sb_nupco_key
-    if val and not catalog_df.empty:
+def on_select_nupco():
+    val = st.session_state.get('key_sb_nupco', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['رقم نوبكو'] == str(val).strip()]
         if not m.empty:
-            st.session_state.current_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.current_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.current_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
 
-def sync_by_item_name():
-    val = st.session_state.sb_name_key
-    if val and not catalog_df.empty:
+def on_select_item_name():
+    val = st.session_state.get('key_sb_item_name', '')
+    if val and val != "-- اختر أو ابحث --" and not catalog_df.empty:
         m = catalog_df[catalog_df['اسم الصنف'] == str(val).strip()]
         if not m.empty:
-            st.session_state.current_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.current_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.current_item_name = str(m.iloc[0]['اسم الصنف'])
+            st.session_state.selected_item_num = str(m.iloc[0]['رقم البند'])
+            st.session_state.selected_nupco_num = str(m.iloc[0]['رقم نوبكو'])
+            st.session_state.selected_item_name = str(m.iloc[0]['اسم الصنف'])
 
 # --- دالة تصدير إكسل آمنة ---
 def to_excel_bytes(df):
@@ -314,51 +314,49 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (الخانة الواحدة المباشرة للبحث والمزامنة) ====================
+    # ==================== الشاشة الأولى (المزامنة اللحظية والبحث بنفس الخانة) ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
-        list_items = sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
-        list_nupco = sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
-        list_names = sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else []
+        list_items = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
+        list_nupco = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
+        list_names = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
 
-        idx_item = list_items.index(st.session_state.current_item_num) if st.session_state.current_item_num in list_items else None
-        idx_nupco = list_nupco.index(st.session_state.current_nupco_num) if st.session_state.current_nupco_num in list_nupco else None
-        idx_name = list_names.index(st.session_state.current_item_name) if st.session_state.current_item_name in list_names else None
+        # حساب الفهرس الحالي لضمان انعكاس التغييرات والمزامنة التلقائية فوراً
+        idx_item = list_items.index(st.session_state.selected_item_num) if st.session_state.selected_item_num in list_items else 0
+        idx_nupco = list_nupco.index(st.session_state.selected_nupco_num) if st.session_state.selected_nupco_num in list_nupco else 0
+        idx_name = list_names.index(st.session_state.selected_item_name) if st.session_state.selected_item_name in list_names else 0
 
         col1, col2, col3 = st.columns(3)
         
         with col1:
             item_num_val = st.selectbox(
-                "1. رقم البند (ابحث أو اكتب مباشرة) *",
+                "1. رقم البند (ابحث أو اختر) *",
                 options=list_items,
                 index=idx_item,
-                key="sb_item_num_key",
-                on_change=sync_by_item_num,
-                accept_new_options=True
+                key="key_sb_item_num",
+                on_change=on_select_item_num
             )
-
+            
             nupco_num_val = st.selectbox(
-                "2. رقم نوبكو (ابحث أو اكتب مباشرة) *",
+                "2. رقم نوبكو (ابحث أو اختر) *",
                 options=list_nupco,
                 index=idx_nupco,
-                key="sb_nupco_key",
-                on_change=sync_by_nupco,
-                accept_new_options=True
+                key="key_sb_nupco",
+                on_change=on_select_nupco
             )
-
+            
             e_market_code = st.text_input("3. كود السوق الالكتروني *", key="input_e_market")
 
         with col2:
             item_name_val = st.selectbox(
-                "4. اسم الصنف (ابحث أو اكتب مباشرة) *",
+                "4. اسم الصنف (ابحث أو اختر) *",
                 options=list_names,
                 index=idx_name,
-                key="sb_name_key",
-                on_change=sync_by_item_name,
-                accept_new_options=True
+                key="key_sb_item_name",
+                on_change=on_select_item_name
             )
-
+            
             unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, key="input_unit_price")
             quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, key="input_quantity")
 
@@ -370,17 +368,17 @@ else:
         st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
 
         if st.button("إرسال الطلب", use_container_width=True):
-            fin_item_num = str(item_num_val).strip() if item_num_val else ""
-            fin_nupco_num = str(nupco_num_val).strip() if nupco_num_val else ""
-            fin_item_name = str(item_name_val).strip() if item_name_val else ""
+            str_item_num = str(item_num_val).strip() if item_num_val != "-- اختر أو ابحث --" else ""
+            str_nupco_num = str(nupco_num_val).strip() if nupco_num_val != "-- اختر أو ابحث --" else ""
+            str_item_name = str(item_name_val).strip() if item_name_val != "-- اختر أو ابحث --" else ""
 
-            if not fin_item_num:
+            if not str_item_num:
                 st.error("❌ حقل 'رقم البند' إلزامي.")
-            elif not fin_nupco_num:
+            elif not str_nupco_num:
                 st.error("❌ حقل 'رقم نوبكو' إلزامي.")
             elif not e_market_code.strip():
                 st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
-            elif not fin_item_name:
+            elif not str_item_name:
                 st.error("❌ حقل 'اسم الصنف' إلزامي.")
             elif unit_price <= 0:
                 st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
@@ -397,17 +395,17 @@ else:
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'قيد المراجعة', ?, '', '', '')
                 ''', (
-                    st.session_state.username, st.session_state.user_hospital, fin_item_num, fin_nupco_num, e_market_code.strip(), 
-                    fin_item_name, unit_price, quantity, total_cost, 
+                    st.session_state.username, st.session_state.user_hospital, str_item_num, str_nupco_num, e_market_code.strip(), 
+                    str_item_name, unit_price, quantity, total_cost, 
                     importance_criteria, reason, datetime.now().strftime("%Y-%m-%d %H:%M")
                 ))
                 conn.commit()
                 conn.close()
                 
-                # إرجاع القيم للحالة الافتراضية
-                st.session_state.current_item_num = None
-                st.session_state.current_nupco_num = None
-                st.session_state.current_item_name = None
+                # إرجاع الخانات للحالة الافتراضية بعد الإرسال
+                st.session_state.selected_item_num = ""
+                st.session_state.selected_nupco_num = ""
+                st.session_state.selected_item_name = ""
                 
                 st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ الخانات لتقديم طلب جديد!")
                 st.rerun()
@@ -428,7 +426,7 @@ else:
         conn.close()
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية ====================
+    # ==================== الشاشة الثانية (مراجعة مستقلة لكل مستشفى) ====================
     elif selected_screen == "الشاشة 2: المراجعة (مستقلة لكل مستشفى)":
         review_hospital = st.session_state.user_hospital
         
@@ -591,7 +589,7 @@ else:
                             st.success(f"تم تحديث وتعديل وتسجيل وقت مراجعة الطلب رقم {req_id} بنجاح!")
                             st.rerun()
 
-    # ==================== الشاشة الثالثة ====================
+    # ==================== الشاشة الثالثة (اعتماد موحد لجميع المستشفيات) ====================
     elif selected_screen == "الشاشة 3: الاعتماد (موحدة لجميع المستشفيات)":
         st.header("✅ الشاشة الثالثة: الاعتماد النهائي وتصدير البيانات (شاشة موحدة)")
         
