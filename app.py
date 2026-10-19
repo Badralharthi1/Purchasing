@@ -167,6 +167,10 @@ if 'sel_nupco_num' not in st.session_state:
 if 'sel_item_name' not in st.session_state:
     st.session_state.sel_item_name = "-- اختر أو ابحث --"
 
+# دوال مساعدة لمدخلات الشاشة الأولى لمسح البيانات عند الطلب
+if 'clear_form_flag' not in st.session_state:
+    st.session_state.clear_form_flag = False
+
 # --- دوال المزامنة الحقيقية والمباشرة ---
 def sync_item_num_changed():
     current_key = f"sb_item_num_{st.session_state.form_counter}"
@@ -338,11 +342,28 @@ else:
         list_nupco = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
         list_names = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
 
+        # في حال تفعيل مسح البيانات، نعيد ضبط الاختيارات الافتراضية
+        if st.session_state.get('clear_form_flag', False):
+            st.session_state.sel_item_num = "-- اختر أو ابحث --"
+            st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
+            st.session_state.sel_item_name = "-- اختر أو ابحث --"
+            st.session_state.form_counter += 1
+            st.session_state.clear_form_flag = False
+
         idx_item = list_items.index(st.session_state.sel_item_num) if st.session_state.sel_item_num in list_items else 0
         idx_nupco = list_nupco.index(st.session_state.sel_nupco_num) if st.session_state.sel_nupco_num in list_nupco else 0
         idx_name = list_names.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in list_names else 0
 
         cnt = st.session_state.form_counter
+
+        # لمعالجة مسح قيم الحقول النصية والرقمية (مثل السوق الإلكتروني، السعر، الكمية، والسبب) عند الإرسال
+        def_e_market = "" if not st.session_state.get('reset_fields', False) else ""
+        def_price = 0.0 if not st.session_state.get('reset_fields', False) else 0.0
+        def_qty = 1 if not st.session_state.get('reset_fields', False) else 1
+        def_reason = "" if not st.session_state.get('reset_fields', False) else ""
+        
+        if st.session_state.get('reset_fields', False):
+            st.session_state.reset_fields = False
 
         col1, col2, col3 = st.columns(3)
         
@@ -363,7 +384,7 @@ else:
                 on_change=sync_nupco_changed
             )
             
-            e_market_code = st.text_input("3. كود السوق الالكتروني *", key="input_e_market")
+            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=def_e_market, key=f"input_e_market_{cnt}")
 
         with col2:
             item_name_val = st.selectbox(
@@ -374,12 +395,12 @@ else:
                 on_change=sync_name_changed
             )
             
-            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, key="input_unit_price")
-            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, key="input_quantity")
+            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=def_price, key=f"input_unit_price_{cnt}")
+            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=def_qty, key=f"input_quantity_{cnt}")
 
         with col3:
-            importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-            reason = st.text_area("8. السبب / المبررات (اختياري)", key="input_reason")
+            importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"], key=f"sb_importance_{cnt}")
+            reason = st.text_area("8. السبب / المبررات (اختياري)", value=def_reason, key=f"input_reason_{cnt}")
 
         total_cost = unit_price * quantity
         st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
@@ -419,12 +440,11 @@ else:
                 conn.commit()
                 conn.close()
                 
-                st.session_state.sel_item_num = "-- اختر أو ابحث --"
-                st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
-                st.session_state.sel_item_name = "-- اختر أو ابحث --"
-                st.session_state.form_counter += 1
+                # تفعيل أعلام مسح البيانات وتفريغ الحقول بالكامل
+                st.session_state.clear_form_flag = True
+                st.session_state.reset_fields = True
                 
-                st.success("✅ تم إرسال طلب الشراء بنجاح وتفريغ الخانات لتقديم طلب جديد!")
+                st.success("✅ تم إرسال طلب الشراء بنجاح ومسح البيانات الحالية لتقديم طلب جديد!")
                 st.rerun()
 
         st.markdown("---")
@@ -888,7 +908,6 @@ else:
         st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
         
         conn = get_db()
-        # سحب جدول الطلبات مع تعريب أسماء الأعمدة بشكل كامل
         df_all = pd.read_sql_query('''
             SELECT id AS "رقم الطلب", requester AS "المستخدم", hospital AS "المستشفى", item_number AS "رقم البند", 
                    nupco_number AS "رقم نوبكو", e_market_code AS "كود السوق الإلكتروني", item_name AS "اسم الصنف", 
@@ -900,7 +919,6 @@ else:
             FROM purchases
         ''', conn)
         
-        # سحب جدول المستخدمين مع تعريب أعمدته بالكامل
         users_df = pd.read_sql_query('''
             SELECT username AS "اسم المستخدم", hospital AS "المستشفى", roles AS "الصلاحيات", status AS "الحالة" 
             FROM users
