@@ -358,7 +358,6 @@ else:
                         st.success(f"تم دمج الطلبات بنجاح في الطلب رقم {primary_id}!")
                         st.rerun()
 
-            # عرض الجدول مع خاصية النقر المباشر لاختيار الطلب
             event = st.dataframe(
                 target_df, 
                 use_container_width=True,
@@ -367,9 +366,6 @@ else:
             )
             
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
-            
-            st.markdown("---")
-            st.subheader("⚙️ اتخاذ إجراء وتعديل الطلب")
             
             if selected_rows:
                 selected_index = selected_rows[0]
@@ -382,8 +378,9 @@ else:
                 conn.close()
                 
                 if current_order:
+                    st.markdown("---")
+                    st.subheader(f"⚙️ اتخاذ إجراء وتعديل الطلب رقم: {req_id}")
                     with st.form("edit_review_form"):
-                        st.write(f"تعديل تفاصيل الطلب المSelected رقم: **{req_id}**")
                         new_item_name = st.text_input("اسم الصنف المعدل", value=current_order[0])
                         new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(current_order[1]), min_value=0.0)
                         new_quantity = st.number_input("الكمية المعدلة", value=int(current_order[2]), min_value=1, step=1)
@@ -426,8 +423,6 @@ else:
                             conn.close()
                             st.success(f"تم تحديث وتعديل الطلب رقم {req_id} بنجاح!")
                             st.rerun()
-            else:
-                st.info("👈 اضغط على أي سطر في الجدول أعلاه لعرض تفاصيله هنا ولاتخاذ الإجراء والتعديل.")
 
     # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد":
@@ -509,9 +504,6 @@ else:
             
             selected_app_rows = event_app.selection.rows if hasattr(event_app, "selection") else []
             
-            st.markdown("---")
-            st.subheader("⚙️ تعديل واعتماد الطلب نهائياً")
-            
             if selected_app_rows:
                 selected_app_index = selected_app_rows[0]
                 req_id_app = int(target_app_df.iloc[selected_app_index]["رقم الطلب"])
@@ -523,8 +515,9 @@ else:
                 conn.close()
                 
                 if current_app_order:
+                    st.markdown("---")
+                    st.subheader(f"⚙️ تعديل واعتماد الطلب نهائياً رقم: {req_id_app}")
                     with st.form("edit_approve_form"):
-                        st.write(f"تعديل تفاصيل الطلب قبل الاعتماد رقم: **{req_id_app}**")
                         app_item_name = st.text_input("اسم الصنف (تعديل نهائي)", value=current_app_order[0])
                         app_unit_price = st.number_input("السعر الأفرادي (تعديل نهائي)", value=float(current_app_order[1]), min_value=0.0)
                         app_quantity = st.number_input("الكمية (تعديل نهائي)", value=int(current_app_order[2]), min_value=1, step=1)
@@ -567,8 +560,6 @@ else:
                             conn.close()
                             st.success(f"تم اتخاذ القرار النهائي وتحديث الطلب رقم {req_id_app}.")
                             st.rerun()
-            else:
-                st.info("👈 اضغط على أي سطر في الجدول أعلاه لعرض تفاصيله هنا ولاتخاذ القرار والاعتماد.")
 
     # ==================== الشاشة الرابعة ====================
     elif selected_screen == "الشاشة 4: الإعدادات وإعطاء الصلاحيات":
@@ -616,4 +607,73 @@ else:
                 
                 if submit_user_edit:
                     if updated_roles:
-                        roles_
+                        roles_string = ",".join(updated_roles)
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute("UPDATE users SET roles = ?, status = ? WHERE username = ?", (roles_string, updated_status, selected_target_user))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"تم تحديث صلاحيات وحالة المستخدم ({selected_target_user}) بنجاح!")
+                        st.rerun()
+                    else:
+                        st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
+
+    # ==================== الشاشة الخامسة ====================
+    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
+        st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية")
+        
+        conn = get_db()
+        all_purchases = pd.read_sql_query("SELECT * FROM purchases", conn)
+        all_users = pd.read_sql_query("SELECT * FROM users", conn)
+        conn.close()
+        
+        total_uploaded = len(all_purchases)
+        rejected_in_review = len(all_purchases[all_purchases['status'] == 'مرفوض في المراجعة']) if not all_purchases.empty else 0
+        review_approved = len(all_purchases[all_purchases['status'] == 'بانتظار الاعتماد']) if not all_purchases.empty else 0
+        finally_approved = len(all_purchases[all_purchases['status'] == 'معتمد نهائياً']) if not all_purchases.empty else 0
+        finally_rejected = len(all_purchases[all_purchases['status'] == 'مرفوض نهائياً']) if not all_purchases.empty else 0
+        total_cost = all_purchases['total_cost'].sum() if not all_purchases.empty else 0.0
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📦 إجمالي الطلبات المرفوعة", total_uploaded)
+        col2.metric("🔍 مراجعة بالاعتماد (معلقة)", review_approved)
+        col3.metric("❌ المراجعة بالرفض", rejected_in_review)
+        
+        col4, col5, col6 = st.columns(3)
+        col4.metric("✅ المعتمدة نهائياً", finally_approved)
+        col5.metric("🚫 المرفوضة نهائياً", finally_rejected)
+        col6.metric("💰 إجمالي التكاليف (ر.س)", f"{total_cost:,.2f}")
+        
+        st.markdown("---")
+        st.subheader("📈 جدول تفاصيل كافة الطلبات في النظام")
+        if not all_purchases.empty:
+            display_purchases = all_purchases.rename(columns={
+                'id': 'رقم الطلب',
+                'requester': 'المستخدم',
+                'item_number': 'رقم البند',
+                'nupco_number': 'رقم نوبكو',
+                'e_market_code': 'كود السوق الإلكتروني',
+                'item_name': 'اسم الصنف',
+                'unit_price': 'السعر الأفرادي',
+                'quantity': 'الكمية',
+                'total_cost': 'الإجمالي',
+                'importance_criteria': 'معيار الأهمية',
+                'reason': 'السبب',
+                'status': 'الحالة',
+                'created_at': 'تاريخ الطلب',
+                'reviewer_notes': 'ملاحظات المراجعة',
+                'approver_notes': 'ملاحظات الاعتماد',
+                'edit_history': 'سجل التعديلات'
+            })
+            st.dataframe(display_purchases, use_container_width=True)
+        else:
+            st.info("لا توجد بيانات طلبات مسجلة حتى الآن.")
+            
+        st.markdown("---")
+        st.subheader("👥 ملخص المستخدمين وحالاتهم وصلاحياتهم")
+        display_users = all_users.rename(columns={
+            'username': 'اسم المستخدم',
+            'roles': 'الصلاحيات',
+            'status': 'الحالة'
+        })[['اسم المستخدم', 'الصلاحيات', 'الحالة']]
+        st.dataframe(display_users, use_container_width=True)
