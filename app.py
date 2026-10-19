@@ -841,7 +841,7 @@ else:
         else:
             st.info("لا توجد حسابات مستخدمين مسجلة.")
         
-        st.subheader("👤 تعديل صلاحيات ومستشفى وحالة مستخدم مباشرة")
+        st.subheader("👤 إدارة صلاحيات المستخدمين")
         
         usernames_list = [u[0] for u in all_users_data]
         selected_target_user = st.selectbox("اختر اسم المستخدم للتعديل المباشر", usernames_list)
