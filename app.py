@@ -6,6 +6,52 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
+# --- إعداد الصفحة والتصميم الخاص للألوان ---
+st.set_page_config(page_title="تتبع عمليات الشراء", layout="wide", page_icon="📋")
+
+# رابط الشعار لتجمع الطائف الصحي
+LOGO_URL = "https://raw.githubusercontent.com/aztreonam/purchasing/main/logo.png"
+
+# تطبيق أنماط CSS مخصصة لجعل الواجهة جذابة ومتناسقة
+st.markdown("""
+    <style>
+    /* تحسين الخطوط والتصميم العام */
+    html, body, [class*="css"] {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* تنسيق العنوان الرئيسي المتمركز */
+    .main-title {
+        text-align: center;
+        color: #0073e6;
+        font-size: 2.2rem;
+        font-weight: bold;
+        margin-top: 10px;
+        margin-bottom: 25px;
+    }
+    
+    /* حاوية الشعار */
+    .logo-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    /* تصميم البطاقات والتحسينات البصرية */
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    
+    /* تحسين البطاقات الاحصائية */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem;
+        color: #0A4D68;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- إعدادات وتشفير كلمات المرور ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
@@ -75,8 +121,6 @@ init_db()
 def get_db():
     return sqlite3.connect('purchase_system.db', check_same_thread=False)
 
-st.set_page_config(page_title="نظام تتبع عمليات الشراء", layout="wide", page_icon="📋")
-
 # --- إدارة جلسة تسجيل الدخول المستقرة ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -94,8 +138,11 @@ def to_excel_bytes(df):
     else:
         return df.to_html(index=False).encode('utf-8-sig')
 
+# ==================== واجهة تسجيل الدخول والتسجيل ====================
 if not st.session_state.logged_in:
-    st.title("📋 نظام تتبع عمليات الشراء والمشتريات")
+    # عرض الشعار بالمنتصف في صفحة الدخول
+    st.markdown(f'<div class="logo-container"><img src="{LOGO_URL}" width="220"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
@@ -152,11 +199,41 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("الرجاء تعبئة جميع الحقول واختيار صلاحية واحدة على الأقل.")
 
+# ==================== الواجهة الرئيسية بعد تسجيل الدخول ====================
 else:
+    # الشعار ثابت في الشريط الجانبي
+    st.sidebar.image(LOGO_URL, use_container_width=True)
+    st.sidebar.markdown("---")
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"الصلاحيات: **{', '.join(st.session_state.user_roles)}**")
     
+    # خيار لتغيير كلمة المرور داخل الشريط الجانبي
+    with st.sidebar.expander("🔒 تغيير كلمة المرور"):
+        with st.form("change_password_form"):
+            curr_pass = st.text_input("كلمة المرور الحالية", type="password")
+            new_pass1 = st.text_input("كلمة المرور الجديدة", type="password")
+            new_pass2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password")
+            submit_pass_change = st.form_submit_button("حفظ كلمة المرور الجديدة")
+            
+            if submit_pass_change:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("SELECT password FROM users WHERE username = ?", (st.session_state.username,))
+                db_pass = c.fetchone()[0]
+                
+                if not check_hashes(curr_pass, db_pass):
+                    st.error("❌ كلمة المرور الحالية غير صحيحة.")
+                elif new_pass1 != new_pass2:
+                    st.error("❌ كلمة المرور الجديدة وتأكيدها غير متطابقين.")
+                elif len(new_pass1) < 4:
+                    st.error("❌ يرجى اختيار كلمة مرور أطول.")
+                else:
+                    c.execute("UPDATE users SET password = ? WHERE username = ?", (make_hashes(new_pass1), st.session_state.username))
+                    conn.commit()
+                    st.success("✅ تم تغيير كلمة المرور بنجاح!")
+                conn.close()
+
     if st.sidebar.button("تسجيل الخروج"):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -185,6 +262,9 @@ else:
 
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
+
+    # العنوان الرئيسي متمركز وموحد أعلى كل شاشة
+    st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -341,7 +421,6 @@ else:
                         c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id,))
                         old_history = c.fetchone()[0] or ""
                         
-                        # التحقق مما إذا تم تعديل أي من الحقول فعلياً
                         has_changed = (
                             new_item_name != current_order[0] or
                             new_unit_price != float(current_order[1]) or
@@ -471,7 +550,6 @@ else:
                         c.execute("SELECT edit_history FROM purchases WHERE id = ?", (req_id_app,))
                         old_history_app = c.fetchone()[0] or ""
                         
-                        # التحقق مما إذا تم تعديل أي من الحقول فعلياً
                         has_changed_app = (
                             app_item_name != current_app_order[0] or
                             app_unit_price != float(current_app_order[1]) or
