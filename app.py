@@ -36,25 +36,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- تحميل ملف الإكسل المرجعي وسحب البيانات ---
-@st.cache_data
-def load_items_catalog():
-    file_path = "استهلاك كل قسم على حدا.xlsx"
-    if os.path.exists(file_path):
-        try:
-            df = pd.read_excel(file_path)
-            df['رقم نوبكو'] = df['رقم نوبكو'].astype(str).str.strip()
-            df['اسم الصنف'] = df['اسم الصنف'].astype(str).str.strip()
-            df['رقم البند'] = df['رقم البند'].fillna('').astype(str).str.strip()
-            df['display_label'] = df['اسم الصنف'] + " | نوبكو: " + df['رقم نوبكو'] + " | بند: " + df['رقم البند']
-            return df
-        except Exception as e:
-            st.error(f"خطأ في قراءة ملف الإكسل: {e}")
-            return pd.DataFrame()
-    return pd.DataFrame()
-
-catalog_df = load_items_catalog()
-
 # --- إعدادات وتشفير كلمات المرور ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
@@ -142,9 +123,24 @@ if 'input_nupco_number' not in st.session_state:
 if 'input_item_name' not in st.session_state:
     st.session_state.input_item_name = ""
 
+catalog_df = pd.DataFrame()
+
+# محاولة تحميل الملف تلقائياً إذا وجد في المجلد
+default_file = "استهلاك كل قسم على حدا.xlsx"
+if os.path.exists(default_file):
+    try:
+        df_temp = pd.read_excel(default_file)
+        df_temp['رقم نوبكو'] = df_temp['رقم نوبكو'].astype(str).str.strip()
+        df_temp['اسم الصنف'] = df_temp['اسم الصنف'].astype(str).str.strip()
+        df_temp['رقم البند'] = df_temp['رقم البند'].fillna('').astype(str).str.strip()
+        df_temp['display_label'] = df_temp['اسم الصنف'] + " | نوبكو: " + df_temp['رقم نوبكو'] + " | بند: " + df_temp['رقم البند']
+        catalog_df = df_temp
+    except Exception:
+        pass
+
 # --- دالة تحديث الحقول عند اختيار صنف من القائمة ---
 def on_select_catalog_item():
-    selected = st.session_state.selected_catalog_option
+    selected = st.session_state.get("selected_catalog_option", "")
     if selected and selected != "-- اختر صنفاً من القائمة أو أدخل يدوياً --":
         matched_row = catalog_df[catalog_df['display_label'] == selected].iloc[0]
         st.session_state.input_item_number = str(matched_row['رقم البند'])
@@ -277,10 +273,24 @@ else:
 
     st.markdown('<div class="main-title">تتبع عمليات الشراء</div>', unsafe_allow_html=True)
 
-    # ==================== الشاشة الأولى (تفعيل التعبئة الآلية الفورية) ====================
+    # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header("🛒 الشاشة الأولى: تقديم طلب شراء جديد")
         
+        # خيار لرفع الملف مباشرة من الواجهة في حال لم يكن موجوداً على السيرفر
+        uploaded_file = st.file_uploader("📁 قم برفع ملف الأصناف (استهلاك كل قسم على حدا.xlsx):", type=["xlsx", "xls"])
+        if uploaded_file is not None:
+            try:
+                df_temp = pd.read_excel(uploaded_file)
+                df_temp['رقم نوبكو'] = df_temp['رقم نوبكو'].astype(str).str.strip()
+                df_temp['اسم الصنف'] = df_temp['اسم الصنف'].astype(str).str.strip()
+                df_temp['رقم البند'] = df_temp['رقم البند'].fillna('').astype(str).str.strip()
+                df_temp['display_label'] = df_temp['اسم الصنف'] + " | نوبكو: " + df_temp['رقم نوبكو'] + " | بند: " + df_temp['رقم البند']
+                catalog_df = df_temp
+                st.success("✅ تم تحميل ملف الأصناف بنجاح!")
+            except Exception as e:
+                st.error(f"خطأ في قراءة الملف المرفوع: {e}")
+
         if not catalog_df.empty:
             st.subheader("🔍 البحث والتحديد المباشر من ملف الأصناف")
             st.selectbox(
@@ -290,7 +300,7 @@ else:
                 on_change=on_select_catalog_item
             )
         else:
-            st.warning("⚠️ لم يتم العثور على ملف 'استهلاك كل قسم على حدا.xlsx' في مجلد التطبيق.")
+            st.warning("⚠️ الرجاء رفع ملف الأصناف الإكسل أعلاه لتفعيل القائمة المنسدلة للبحث الفوري.")
 
         st.markdown("---")
         
@@ -343,7 +353,6 @@ else:
                     conn.commit()
                     conn.close()
                     
-                    # إعادة ضبط حقول نموذج الإدخال بعد النجاح
                     st.session_state.input_item_number = ""
                     st.session_state.input_nupco_number = ""
                     st.session_state.input_item_name = ""
@@ -746,7 +755,7 @@ else:
                     else:
                         st.warning("الرجاء اختيار صلاحية واحدة على الأقل.")
 
-    # ==================== الشاشة الخامسة (الداش بورد) ====================
+    # ==================== الشاشة الخامسة ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
         st.header("📊 الشاشة الخامسة: لوحة التحكم والتقارير التفصيلية لكل مرحلة")
         
