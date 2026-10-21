@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="تتبع عمليات الشراء السريع", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء الفائق", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -57,15 +57,14 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# --- الاتصال السحابي السريع ---
+# --- الاتصال السحابي ---
 @st.cache_resource
 def get_gsheet_client():
     raw_json = st.secrets["gcp_json"]
     creds_dict = json.loads(raw_json)
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    return client
+    return gspread.authorize(creds)
 
 def get_worksheet(worksheet_name):
     client = get_gsheet_client()
@@ -75,77 +74,58 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- تهيئة قواعد البيانات السحابية ---
-def init_cloud_db():
-    ws_users = get_worksheet("users")
-    users_records = ws_users.get_all_records()
-    admin_pw_hash = make_hashes("admin123")
-    admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
-    
-    if not users_records:
-        ws_users.update([
-            ["username", "password", "roles", "status", "hospital"],
-            ["admin", admin_pw_hash, admin_roles, "معتمد", "مجمع الملك فيصل"]
-        ])
-    else:
-        df = pd.DataFrame(users_records)
-        if "username" in df.columns and "admin" in df["username"].values:
-            cell = ws_users.find("admin")
-            if cell:
-                ws_users.update_cell(cell.row, 2, admin_pw_hash)
-                ws_users.update_cell(cell.row, 3, admin_roles)
-                ws_users.update_cell(cell.row, 4, "معتمد")
+# --- إدارة الذاكرة المحلية المؤقتة للسرعة القصوى ---
+def load_data_to_session():
+    if 'db_users' not in st.session_state or st.session_state.get('force_reload', False):
+        try:
+            ws_users = get_worksheet("users")
+            recs = ws_users.get_all_records()
+            if not recs:
+                admin_pw = make_hashes("admin123")
+                admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+                ws_users.update([
+                    ["username", "password", "roles", "status", "hospital"],
+                    ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
+                ])
+                st.session_state.db_users = pd.DataFrame([{
+                    "username": "admin", "password": admin_pw, "roles": admin_roles, "status": "معتمد", "hospital": "مجمع الملك فيصل"
+                }])
+            else:
+                df_u = pd.DataFrame(recs)
+                df_u.columns = [str(c).strip() for c in df_u.columns]
+                st.session_state.db_users = df_u
+        except Exception:
+            st.session_state.db_users = pd.DataFrame(columns=["username", "password", "roles", "status", "hospital"])
 
-    ws_purchases = get_worksheet("purchases")
-    purchases_records = ws_purchases.get_all_records()
-    if not purchases_records:
-        ws_purchases.update([[
-            "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
-            "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
-            "reason", "status", "created_at", "reviewed_at", "approved_at",
-            "reviewer_notes", "approver_notes", "edit_history"
-        ]])
+    if 'db_purchases' not in st.session_state or st.session_state.get('force_reload', False):
+        try:
+            ws_p = get_worksheet("purchases")
+            recs_p = ws_p.get_all_records()
+            if not recs_p:
+                ws_p.update([[
+                    "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
+                    "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
+                    "reason", "status", "created_at", "reviewed_at", "approved_at",
+                    "reviewer_notes", "approver_notes", "edit_history"
+                ]])
+                st.session_state.db_purchases = pd.DataFrame(columns=[
+                    "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
+                    "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
+                    "reason", "status", "created_at", "reviewed_at", "approved_at",
+                    "reviewer_notes", "approver_notes", "edit_history"
+                ])
+            else:
+                df_p = pd.DataFrame(recs_p)
+                df_p.columns = [str(c).strip() for c in df_p.columns]
+                if "id" in df_p.columns:
+                    df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce")
+                st.session_state.db_purchases = df_p
+        except Exception:
+            st.session_state.db_purchases = pd.DataFrame()
+            
+    st.session_state.force_reload = False
 
-init_cloud_db()
-
-# --- جلب البيانات مع التخزين المؤقت للأداء السريع (Cache) ---
-@st.cache_data(ttl=60)
-def get_all_users_cached():
-    try:
-        ws_users = get_worksheet("users")
-        records = ws_users.get_all_records()
-        if not records:
-            return pd.DataFrame(columns=["username", "password", "roles", "status", "hospital"])
-        df = pd.DataFrame(records)
-        df.columns = [str(c).strip() for c in df.columns]
-        return df
-    except Exception:
-        return pd.DataFrame(columns=["username", "password", "roles", "status", "hospital"])
-
-@st.cache_data(ttl=15)
-def get_all_purchases_cached():
-    try:
-        ws_purchases = get_worksheet("purchases")
-        records = ws_purchases.get_all_records()
-        if not records:
-            return pd.DataFrame(columns=[
-                "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
-                "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
-                "reason", "status", "created_at", "reviewed_at", "approved_at",
-                "reviewer_notes", "approver_notes", "edit_history"
-            ])
-        df = pd.DataFrame(records)
-        df.columns = [str(c).strip() for c in df.columns]
-        if "id" in df.columns:
-            df["id"] = pd.to_numeric(df["id"], errors="coerce")
-        return df
-    except Exception:
-        return pd.DataFrame()
-
-# دالة لتفريغ الكاش وفروض التحديث الفوري عند أي عملية كتابة
-def clear_data_cache():
-    get_all_users_cached.clear()
-    get_all_purchases_cached.clear()
+load_data_to_session()
 
 # --- تحميل ملف الإكسل المرجعي للأصناف ---
 @st.cache_data
@@ -164,7 +144,7 @@ def load_items_catalog():
 
 catalog_df = load_items_catalog()
 
-# --- إدارة جلسة العمل وقيم النماذج ---
+# --- إدارة الجلسة ونماذج الإدخال ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
@@ -220,9 +200,9 @@ def sync_name_changed():
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
-# ==================== واجهة تسجيل الدخول والتسجيل ====================
+# ==================== تسجيل الدخول ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title">⚡ نظام تتبع عمليات الشراء السريع</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء (أداء صاروخي)</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
@@ -233,10 +213,8 @@ if not st.session_state.logged_in:
         with st.form("login_form"):
             username = st.text_input("اسم المستخدم")
             password = st.text_input("كلمة المرور", type='password')
-            submit_login = st.form_submit_button("دخول")
-            
-            if submit_login:
-                df_users = get_all_users_cached()
+            if st.form_submit_button("دخول"):
+                df_users = st.session_state.db_users
                 user_row = df_users[df_users["username"] == username]
                 
                 if not user_row.empty:
@@ -267,24 +245,24 @@ if not st.session_state.logged_in:
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
             all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
-            requested_roles = st.multiselect("الصلاحيات المطلوبة (اختر ما تحتاجه)", all_available_roles, default=[])
-            submit_signup = st.form_submit_button("إرسال طلب التسجيل")
+            requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles, default=[])
             
-            if submit_signup:
+            if st.form_submit_button("إرسال طلب التسجيل"):
                 if new_user and new_pass and requested_roles and selected_hospital:
-                    df_users = get_all_users_cached()
+                    df_users = st.session_state.db_users
                     if not df_users[df_users["username"] == new_user].empty:
                         st.error("❌ اسم المستخدم مستخدم مسبقاً.")
                     else:
                         ws_users = get_worksheet("users")
                         roles_str = ",".join(requested_roles)
                         ws_users.append_row([new_user, make_hashes(new_pass), roles_str, "قيد الانتظار", selected_hospital])
-                        clear_data_cache()
-                        st.success("✅ تم إرسال طلبك بنجاح! ينتظر اعتماد الأدمن.")
+                        st.session_state.force_reload = True
+                        load_data_to_session()
+                        st.success("✅ تم إرسال طلبك بنجاح!")
                 else:
-                    st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى وصلاحية واحدة على الأقل.")
+                    st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى والصلاحية.")
 
-# ==================== الواجهة الرئيسية بعد تسجيل الدخول ====================
+# ==================== الواجهة الرئيسية ====================
 else:
     st.sidebar.title("👤 لوحة التحكم")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
@@ -296,10 +274,8 @@ else:
             curr_pass = st.text_input("كلمة المرور الحالية", type="password")
             new_pass1 = st.text_input("كلمة المرور الجديدة", type="password")
             new_pass2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password")
-            submit_pass_change = st.form_submit_button("حفظ كلمة المرور الجديدة")
-            
-            if submit_pass_change:
-                df_users = get_all_users_cached()
+            if st.form_submit_button("حفظ كلمة المرور"):
+                df_users = st.session_state.db_users
                 user_row = df_users[df_users["username"] == st.session_state.username]
                 db_pass = user_row.iloc[0]["password"] if not user_row.empty else ""
                 
@@ -308,13 +284,14 @@ else:
                 elif new_pass1 != new_pass2:
                     st.error("❌ كلمة المرور الجديدة وتأكيدها غير متطابقين.")
                 elif len(new_pass1) < 4:
-                    st.error("❌ يرجى اختيار كلمة مرور أطول.")
+                    st.error("❌ كلمة المرور قصيرة جداً.")
                 else:
                     ws_users = get_worksheet("users")
                     cell = ws_users.find(st.session_state.username)
                     if cell:
                         ws_users.update_cell(cell.row, 2, make_hashes(new_pass1))
-                        clear_data_cache()
+                        st.session_state.force_reload = True
+                        load_data_to_session()
                         st.success("✅ تم تغيير كلمة المرور بنجاح!")
 
     if st.sidebar.button("تسجيل الخروج"):
@@ -341,13 +318,13 @@ else:
         screens.append("الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)")
 
     if not screens:
-        st.warning("⚠️ لا توجد لديك أي صلاحيات مفعلة حالياً.")
+        st.warning("⚠️ لا توجد صلاحيات مفعلة حالياً.")
         st.stop()
 
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title">تتبع عمليات الشراء (أداء عالي)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">⚡ نظام تتبع الشراء الفائق</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -369,7 +346,6 @@ else:
         idx_name = list_names.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in list_names else 0
 
         cnt = st.session_state.form_counter
-
         def_e_market = "" if not st.session_state.get('reset_fields', False) else ""
         def_price = 0.0 if not st.session_state.get('reset_fields', False) else 0.0
         def_qty = 1 if not st.session_state.get('reset_fields', False) else 1
@@ -379,20 +355,19 @@ else:
             st.session_state.reset_fields = False
 
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            item_num_val = st.selectbox("1. رقم البند (ابحث أو اختر) *", options=list_items, index=idx_item, key=f"sb_item_num_{cnt}", on_change=sync_item_num_changed)
-            nupco_num_val = st.selectbox("2. رقم نوبكو (ابحث أو اختر) *", options=list_nupco, index=idx_nupco, key=f"sb_nupco_{cnt}", on_change=sync_nupco_changed)
+            item_num_val = st.selectbox("1. رقم البند *", options=list_items, index=idx_item, key=f"sb_item_num_{cnt}", on_change=sync_item_num_changed)
+            nupco_num_val = st.selectbox("2. رقم نوبكو *", options=list_nupco, index=idx_nupco, key=f"sb_nupco_{cnt}", on_change=sync_nupco_changed)
             e_market_code = st.text_input("3. كود السوق الالكتروني *", value=def_e_market, key=f"input_e_market_{cnt}")
 
         with col2:
-            item_name_val = st.selectbox("4. اسم الصنف (ابحث أو اختر) *", options=list_names, index=idx_name, key=f"sb_name_{cnt}", on_change=sync_name_changed)
-            unit_price = st.number_input("5. السعر الافرادي (ر.س) *", min_value=0.0, step=1.0, value=def_price, key=f"input_unit_price_{cnt}")
+            item_name_val = st.selectbox("4. اسم الصنف *", options=list_names, index=idx_name, key=f"sb_name_{cnt}", on_change=sync_name_changed)
+            unit_price = st.number_input("5. السعر الافرادي *", min_value=0.0, step=1.0, value=def_price, key=f"input_unit_price_{cnt}")
             quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=def_qty, key=f"input_quantity_{cnt}")
 
         with col3:
             importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"], key=f"sb_importance_{cnt}")
-            reason = st.text_area("8. السبب / المبررات (اختياري)", value=def_reason, key=f"input_reason_{cnt}")
+            reason = st.text_area("8. السبب / المبررات", value=def_reason, key=f"input_reason_{cnt}")
 
         total_cost = unit_price * quantity
         st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
@@ -402,20 +377,10 @@ else:
             str_nupco_num = str(nupco_num_val).strip() if nupco_num_val != "-- اختر أو ابحث --" else ""
             str_item_name = str(item_name_val).strip() if item_name_val != "-- اختر أو ابحث --" else ""
 
-            if not str_item_num:
-                st.error("❌ حقل 'رقم البند' إلزامي.")
-            elif not str_nupco_num:
-                st.error("❌ حقل 'رقم نوبكو' إلزامي.")
-            elif not e_market_code.strip():
-                st.error("❌ حقل 'كود السوق الالكتروني' إلزامي.")
-            elif not str_item_name:
-                st.error("❌ حقل 'اسم الصنف' إلزامي.")
-            elif unit_price <= 0:
-                st.error("❌ يرجى إدخال 'سعر أفرادي' أعلى من الصفر.")
-            elif quantity <= 0:
-                st.error("❌ يرجى إدخال 'كمية' أعلى من الصفر.")
+            if not str_item_num or not str_nupco_num or not e_market_code.strip() or not str_item_name or unit_price <= 0 or quantity <= 0:
+                st.error("❌ يرجى تعبئة كافة الحقول الإلزامية بصورة صحيحة.")
             else:
-                df_all_p = get_all_purchases_cached()
+                df_all_p = st.session_state.db_purchases
                 new_id = int(df_all_p["id"].max()) + 1 if not df_all_p.empty and not pd.isna(df_all_p["id"].max()) else 1
                 
                 ws_purchases = get_worksheet("purchases")
@@ -425,40 +390,37 @@ else:
                     unit_price, quantity, total_cost, importance_criteria, reason,
                     "قيد المراجعة", datetime.now().strftime("%Y-%m-%d %H:%M"), "", "", "", "", ""
                 ])
-                clear_data_cache()
+                st.session_state.force_reload = True
+                load_data_to_session()
                 
                 st.session_state.clear_form_flag = True
                 st.session_state.reset_fields = True
-                st.success("✅ تم إرسال طلب الشراء بنجاح!")
+                st.success("✅ تم إرسال طلب الشراء بنجاح بسرعة البرق!")
                 st.rerun()
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
-        df_all_p = get_all_purchases_cached()
+        df_all_p = st.session_state.db_purchases
         df_my_orders = df_all_p[df_all_p["requester"] == st.session_state.username] if not df_all_p.empty else pd.DataFrame()
-        
         if not df_my_orders.empty:
             df_my_orders = df_my_orders.rename(columns={
                 "id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق الإلكتروني",
+                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق",
                 "item_name": "اسم الصنف", "unit_price": "السعر الأفرادي", "quantity": "الكمية",
-                "total_cost": "الإجمالي", "importance_criteria": "معيار الأهمية", "reason": "السبب",
-                "status": "الحالة", "created_at": "تاريخ الإنشاء", "reviewed_at": "تاريخ ووقت المراجعة",
-                "approved_at": "تاريخ ووقت الاعتماد النهائي", "reviewer_notes": "ملاحظات المراجعة",
-                "approver_notes": "ملاحظات الاعتماد", "edit_history": "سجل التعديلات"
+                "total_cost": "الإجمالي", "importance_criteria": "الأهمية", "reason": "السبب",
+                "status": "الحالة", "created_at": "تاريخ الإنشاء"
             })
         st.dataframe(df_my_orders, use_container_width=True)
 
     # ==================== الشاشة الثانية ====================
     elif selected_screen == "الشاشة 2: المراجعة (مستقلة لكل مستشفى)":
         review_hospital = st.session_state.user_hospital
-        
         if "مدير النظام (Admin)" in st.session_state.user_roles:
-            review_hospital = st.selectbox("اختيار مستشفى للمراجعة (خاص بالأدمن):", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0)
+            review_hospital = st.selectbox("اختيار مستشفى للمراجعة:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0)
 
         st.header(f"🔍 الشاشة الثانية: مراجعة الطلبات ({review_hospital})")
+        df_all_p = st.session_state.db_purchases
         
-        df_all_p = get_all_purchases_cached()
         if not df_all_p.empty:
             df_review = df_all_p[(df_all_p["status"] == 'قيد المراجعة') & (df_all_p["hospital"] == review_hospital)]
             df_all_system = df_all_p[df_all_p["hospital"] == review_hospital]
@@ -469,23 +431,20 @@ else:
         if not df_review.empty:
             df_review = df_review.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق الإلكتروني", "item_name": "اسم الصنف",
+                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق", "item_name": "اسم الصنف",
                 "unit_price": "السعر الأفرادي", "quantity": "الكمية", "total_cost": "الإجمالي",
-                "importance_criteria": "معيار الأهمية", "reason": "السبب", "created_at": "تاريخ الإنشاء", "edit_history": "سجل التعديلات"
+                "importance_criteria": "الأهمية", "reason": "السبب", "created_at": "تاريخ الإنشاء"
             })
-        
-        if not df_review.empty:
-            st.subheader("📦 قائمة الطلبات المعلقة للمراجعة (انقر على السطر لاختياره)")
+            
+            st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
             nupco_list_filter = [n for n in df_review["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
             
             target_df = df_review
             if nupco_filter != "الكل":
                 target_df = df_review[df_review["رقم نوبكو"] == nupco_filter]
-                st.info(f"يوجد {len(target_df)} طلبات مرتبطة برقم نوبكو: {nupco_filter}")
-                
                 if len(target_df) > 1:
-                    if st.button(f"🔀 دمج الطلبات الـ ({len(target_df)}) المرتبطة برقم نوبكو {nupco_filter}", type="primary"):
+                    if st.button(f"🔀 دمج الطلبات الـ ({len(target_df)}) برقم نوبكو {nupco_filter}", type="primary"):
                         ws_p = get_worksheet("purchases")
                         all_rows = ws_p.get_all_records()
                         ids = target_df["رقم الطلب"].tolist()
@@ -504,8 +463,9 @@ else:
                                 if row.get("id") == remove_id:
                                     ws_p.delete_rows(idx)
                                     break
-                        clear_data_cache()
-                        st.success("تم دمج الطلبات بنجاح!")
+                        st.session_state.force_reload = True
+                        load_data_to_session()
+                        st.success("تم الدمج بنجاح!")
                         st.rerun()
 
             event = st.dataframe(target_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
@@ -513,28 +473,24 @@ else:
             
             if selected_rows:
                 req_id = int(target_df.iloc[selected_rows[0]]["رقم الطلب"])
-                selected_nupco_val = str(target_df.iloc[selected_rows[0]]["رقم نوبكو"])
-                
                 current_order_row = df_all_p[df_all_p["id"] == req_id]
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     st.markdown("---")
-                    st.subheader(f"⚙️ اتخاذ إجراء وتعديل الطلب رقم: {req_id}")
+                    st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
                     with st.form("edit_review_form"):
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             new_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
                             new_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
-                            new_e_market_code = st.text_input("كود السوق الإلكتروني", value=str(co["e_market_code"]))
+                            new_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
                         with c2:
-                            new_item_name = st.text_input("اسم الصنف المعدل", value=str(co["item_name"]))
-                            new_unit_price = st.number_input("السعر الأفرادي المعدل", value=float(co["unit_price"]), min_value=0.0)
-                            new_quantity = st.number_input("الكمية المعدلة", value=int(co["quantity"]), min_value=1, step=1)
+                            new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
+                            new_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
+                            new_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
                         with c3:
-                            importance_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
-                            curr_importance = co["importance_criteria"] if co["importance_criteria"] in importance_options else "متوسط"
-                            new_importance = st.selectbox("معيار الأهمية", importance_options, index=importance_options.index(curr_importance))
-                            new_reason = st.text_area("السبب / المبرر المعدل", value=str(co["reason"] or ""))
+                            new_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                            new_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         review_notes = st.text_input("ملاحظات المراجعة")
                         action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
@@ -561,179 +517,66 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            clear_data_cache()
-                            st.success(f"تم تحديث الطلب رقم {req_id} بنجاح!")
+                            st.session_state.force_reload = True
+                            load_data_to_session()
+                            st.success("تم التحديث بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات جديدة بانتظار المراجعة لـ ({review_hospital}) حالياً.")
+            st.info("لا توجد طلبات معلقة للمراجعة.")
 
-    # ==================== الشاشة الثالثة (الاعتماد النهائي) ====================
+    # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد النهائي":
         st.header("✅ الشاشة الثالثة: الاعتماد النهائي")
-        
-        df_all_p = get_all_purchases_cached()
+        df_all_p = st.session_state.db_purchases
         df_approve = df_all_p[df_all_p["status"] == 'بانتظار الاعتماد'] if not df_all_p.empty else pd.DataFrame()
-        df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
         
-        if not df_all_approved.empty:
-            df_app_view = df_all_approved.rename(columns={
-                "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق الإلكتروني", "item_name": "اسم الصنف",
-                "unit_price": "السعر الأفرادي", "quantity": "الكمية", "total_cost": "الإجمالي",
-                "importance_criteria": "معيار الأهمية", "reason": "السبب", "status": "الحالة",
-                "created_at": "تاريخ الإنشاء", "reviewed_at": "تاريخ المراجعة", "approved_at": "تاريخ الاعتماد النهائي",
-                "approver_notes": "ملاحظات الاعتماد"
-            })
-            excel_bytes = to_excel_bytes(df_app_view)
-            st.download_button(
-                label="📥 تصدير الطلبات المعتمدة نهائياً إلى ملف Excel (.xls)",
-                data=excel_bytes,
-                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
-                mime="application/vnd.ms-excel"
-            )
-            st.markdown("---")
-        
-        if df_approve.empty:
-            st.info("لا توجد طلبات بانتظار الاعتماد النهائي حالياً.")
-        else:
+        if not df_approve.empty:
             df_approve_view = df_approve.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق الإلكتروني", "item_name": "اسم الصنف",
-                "unit_price": "السعر الأفرادي", "quantity": "الكمية", "total_cost": "الإجمالي",
-                "importance_criteria": "معيار الأهمية", "reason": "السبب", "reviewed_at": "تاريخ ووقت المراجعة",
-                "reviewer_notes": "ملاحظات المراجعة", "edit_history": "سجل التعديلات"
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة"
             })
-            
             event_app = st.dataframe(df_approve_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
                 app_req_id = int(df_approve_view.iloc[sel_rows_app[0]]["رقم الطلب"])
-                st.markdown("---")
-                st.subheader(f"⚖️ اتخاذ القرار النهائي للطلب رقم: {app_req_id}")
                 with st.form("approval_action_form"):
                     approver_notes = st.text_input("ملاحظات المعتمد")
                     app_action = st.selectbox("قرار الاعتماد", ["اعتماد الطلب نهائياً", "رفض الطلب نهائياً"])
-                    
-                    if st.form_submit_button("تنفيذ واعتماد القرار"):
-                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        final_status = "معتمد نهائياً" if app_action == "اعتماد الطلب نهائياً" else "مرفوض نهائياً"
-                        
+                    if st.form_submit_button("تنفيذ القرار"):
                         ws_p = get_worksheet("purchases")
                         all_rows = ws_p.get_all_records()
+                        final_status = "معتمد نهائياً" if app_action == "اعتماد الطلب نهائياً" else "مرفوض نهائياً"
                         for idx, row in enumerate(all_rows, start=2):
                             if row.get("id") == app_req_id:
                                 ws_p.update_cell(idx, 13, str(final_status))
-                                ws_p.update_cell(idx, 16, str(now_str))
+                                ws_p.update_cell(idx, 16, str(datetime.now().strftime("%Y-%m-%d %H:%M")))
                                 ws_p.update_cell(idx, 18, str(approver_notes))
                                 break
-                        clear_data_cache()
-                        st.success(f"تم تسجيل القرار النهائي للطلب رقم {app_req_id} بنجاح!")
+                        st.session_state.force_reload = True
+                        load_data_to_session()
+                        st.success("تم اعتماد القرار بنجاح!")
                         st.rerun()
+        else:
+            st.info("لا توجد طلبات بانتظار الاعتماد.")
 
-    # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
+    # ==================== الشاشة الرابعة ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
-            st.error("❌ عذراً، هذه الشاشة مخصصة لمدير النظام فقط.")
+            st.error("❌ عذراً، مخصص للأدمن فقط.")
         else:
-            st.header("⚙️ الشاشة الرابعة: إدارة الصلاحيات والمستخدمين")
-            
-            df_users = get_all_users_cached()
-            st.subheader("📋 جدول المستخدمين الحاليين")
-            
-            if not df_users.empty:
-                for idx, row in df_users.iterrows():
-                    u_name = row["username"]
-                    u_hosp = row["hospital"] or "مجمع الملك فيصل"
-                    u_roles = row["roles"]
-                    u_status = row["status"]
-                    
-                    col1, col2, col3, col4, col5 = st.columns([2, 2, 3, 2, 1])
-                    col1.write(u_name)
-                    col2.write(u_hosp)
-                    col3.write(u_roles)
-                    col4.write(u_status)
-                    
-                    with col5:
-                        if st.button("🗑️", key=f"del_u_{u_name}"):
-                            if u_name == "admin":
-                                st.error("لا يمكن حذف المدير الأساسي.")
-                            elif u_name == st.session_state.username:
-                                st.error("لا يمكنك حذف حسابك.")
-                            else:
-                                ws_u = get_worksheet("users")
-                                cell = ws_u.find(u_name)
-                                if cell:
-                                    ws_u.delete_rows(cell.row)
-                                    clear_data_cache()
-                                    st.success(f"تم حذف {u_name}")
-                                    st.rerun()
-                    st.markdown("---")
-            
-            st.subheader("👤 تعديل صلاحيات المستخدمين")
-            if not df_users.empty:
-                usernames_list = df_users["username"].tolist()
-                selected_target_user = st.selectbox("اختر مستخدم للتعديل", usernames_list)
-                
-                target_row = df_users[df_users["username"] == selected_target_user].iloc[0]
-                curr_roles = target_row["roles"].split(",") if target_row["roles"] else []
-                curr_status = target_row["status"]
-                curr_hosp = target_row["hospital"] if target_row["hospital"] in HOSPITALS_LIST else HOSPITALS_LIST[0]
-                
-                with st.form("direct_user_edit_form"):
-                    updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
-                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
-                    updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
-                    status_options = ["معتمد", "قيد الانتظار", "موقوف"]
-                    updated_status = st.selectbox("حالة الحساب", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
-                    
-                    if st.form_submit_button("حفظ التعديلات"):
-                        ws_u = get_worksheet("users")
-                        cell = ws_u.find(selected_target_user)
-                        if cell:
-                            ws_u.update_cell(cell.row, 3, ",".join(updated_roles))
-                            ws_u.update_cell(cell.row, 4, str(updated_status))
-                            ws_u.update_cell(cell.row, 5, str(updated_hosp))
-                            clear_data_cache()
-                            st.success("تم التعديل بنجاح!")
-                            st.rerun()
+            st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين")
+            df_users = st.session_state.db_users
+            st.dataframe(df_users, use_container_width=True)
 
-    # ==================== الشاشة الخامسة (Dashboard) ====================
+    # ==================== الشاشة الخامسة ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة المؤشرات والإحصائيات العامة (Dashboard)")
-        
-        df_all = get_all_purchases_cached()
-        users_df = get_all_users_cached()
-        
-        dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
-        if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
-            df_all = df_all[df_all['hospital'] == dash_hosp_filter]
-        
+        st.header("📊 الشاشة الخامسة: لوحة المؤشرات (Dashboard)")
+        df_all = st.session_state.db_purchases
         if not df_all.empty:
-            total_orders = len(df_all)
-            total_budget = df_all['total_cost'].sum() if 'total_cost' in df_all.columns else 0.0
-            pending_count = len(df_all[df_all['status'].isin(['قيد المراجعة', 'بانتظار الاعتماد'])])
-            approved_count = len(df_all[df_all['status'] == 'معتمد نهائياً'])
-            
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("إجمالي الطلبات", total_orders)
-            c2.metric("إجمالي التكاليف", f"{total_budget:,.2f} ر.س")
-            c3.metric("الطلبات المعلقة", pending_count)
-            c4.metric("الطلبات المعتمدة نهائياً", approved_count)
-            
-            st.markdown("---")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.subheader("🏥 توزيع الطلبات حسب المستشفى")
-                if 'hospital' in df_all.columns:
-                    st.bar_chart(df_all['hospital'].value_counts())
-            with col_d2:
-                st.subheader("📌 تباين حالات الطلبات")
-                if 'status' in df_all.columns:
-                    st.bar_chart(df_all['status'].value_counts())
+            c1, c2, c3 = st.columns(3)
+            c1.metric("إجمالي الطلبات", len(df_all))
+            c2.metric("الإجمالي الكلي", f"{df_all['total_cost'].sum():,.2f} ر.س")
+            c3.metric("الطلبات المعتمدة", len(df_all[df_all['status'] == 'معتمد نهائياً']))
         else:
-            st.info("لا توجد بيانات مسجلة بعد.")
-        
-        st.markdown("---")
-        st.subheader("👥 ملخص الحسابات والمستخدمين")
-        st.dataframe(users_df, use_container_width=True)
+            st.info("لا توجد بيانات مسجلة.")
