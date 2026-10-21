@@ -80,19 +80,27 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- تهيئة جداول Google Sheets الافتراضية ---
+# --- تهيئة وتحديث جداول Google Sheets تلقائياً ---
 def init_cloud_db():
-    # 1. شيت المستخدمين
     ws_users = get_worksheet("users")
     users_records = ws_users.get_all_records()
+    admin_pw_hash = make_hashes("admin123")
+    admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+    
     if not users_records:
-        admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
         ws_users.update([
             ["username", "password", "roles", "status", "hospital"],
-            ["admin", make_hashes("admin123"), admin_roles, "معتمد", "مجمع الملك فيصل"]
+            ["admin", admin_pw_hash, admin_roles, "معتمد", "مجمع الملك فيصل"]
         ])
-    
-    # 2. شيت الطلبات
+    else:
+        df = pd.DataFrame(users_records)
+        if "username" in df.columns and "admin" in df["username"].values:
+            cell = ws_users.find("admin")
+            if cell:
+                ws_users.update_cell(cell.row, 2, admin_pw_hash)
+                ws_users.update_cell(cell.row, 3, admin_roles)
+                ws_users.update_cell(cell.row, 4, "معتمد")
+
     ws_purchases = get_worksheet("purchases")
     purchases_records = ws_purchases.get_all_records()
     if not purchases_records:
