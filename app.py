@@ -107,29 +107,56 @@ def init_cloud_db():
 
 init_cloud_db()
 
-# --- جلب بيانات المستخدمين من Google Sheets ---
+# --- جلب بيانات المستخدمين بشكل آمن ومقاوم للأخطاء ---
 def get_all_users_df():
-    ws_users = get_worksheet("users")
-    records = ws_users.get_all_records()
-    if not records:
+    try:
+        ws_users = get_worksheet("users")
+        records = ws_users.get_all_records()
+        if not records:
+            admin_pw_hash = make_hashes("admin123")
+            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+            ws_users.update([
+                ["username", "password", "roles", "status", "hospital"],
+                ["admin", admin_pw_hash, admin_roles, "معتمد", "مجمع الملك فيصل"]
+            ])
+            return pd.DataFrame([{
+                "username": "admin",
+                "password": admin_pw_hash,
+                "roles": admin_roles,
+                "status": "معتمد",
+                "hospital": "مجمع الملك فيصل"
+            }])
+        
+        df = pd.DataFrame(records)
+        df.columns = [str(c).strip() for c in df.columns]
+        for col in ["username", "password", "roles", "status", "hospital"]:
+            if col not in df.columns:
+                df[col] = ""
+        return df
+    except Exception as e:
+        st.error(f"خطأ في قراءة ورقة المستخدمين: {e}")
         return pd.DataFrame(columns=["username", "password", "roles", "status", "hospital"])
-    return pd.DataFrame(records)
 
 # --- جلب بيانات الطلبات من Google Sheets ---
 def get_all_purchases_df():
-    ws_purchases = get_worksheet("purchases")
-    records = ws_purchases.get_all_records()
-    if not records:
-        return pd.DataFrame(columns=[
-            "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
-            "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
-            "reason", "status", "created_at", "reviewed_at", "approved_at",
-            "reviewer_notes", "approver_notes", "edit_history"
-        ])
-    df = pd.DataFrame(records)
-    if "id" in df.columns:
-        df["id"] = pd.to_numeric(df["id"], errors="coerce")
-    return df
+    try:
+        ws_purchases = get_worksheet("purchases")
+        records = ws_purchases.get_all_records()
+        if not records:
+            return pd.DataFrame(columns=[
+                "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
+                "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
+                "reason", "status", "created_at", "reviewed_at", "approved_at",
+                "reviewer_notes", "approver_notes", "edit_history"
+            ])
+        df = pd.DataFrame(records)
+        df.columns = [str(c).strip() for c in df.columns]
+        if "id" in df.columns:
+            df["id"] = pd.to_numeric(df["id"], errors="coerce")
+        return df
+    except Exception as e:
+        st.error(f"خطأ في جلب الطلبات: {e}")
+        return pd.DataFrame()
 
 # --- تحميل ملف الإكسل المرجعي للأصناف ---
 @st.cache_data
