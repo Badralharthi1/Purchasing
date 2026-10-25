@@ -657,6 +657,7 @@ else:
         st.header(f"🚨 الشاشة الرابعة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
+        # --- زر تصدير طلبات الطوارئ إلى Excel ---
         df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
         if selected_emg_filter != "جميع المستشفيات" and not df_all_emergency_approved.empty:
             df_all_emergency_approved = df_all_emergency_approved[df_all_emergency_approved["hospital"] == selected_emg_filter]
@@ -664,7 +665,7 @@ else:
         if not df_all_emergency_approved.empty:
             excel_bytes_emg = to_excel_bytes(df_all_emergency_approved)
             st.download_button(
-                label="📥 تصدير جميع طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
+                label="📥 تصدير طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
                 data=excel_bytes_emg,
                 file_name=f"emergency_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
                 mime="application/vnd.ms-excel"
