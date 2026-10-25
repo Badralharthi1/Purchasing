@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="نظام تتبع عمليات الشراء الفائق", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -74,7 +74,7 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- إدارة الذاكرة المحلية المؤقتة للسرعة القصوى ---
+# --- إدارة الذاكرة المحلية المؤقتة لضمان عدم الخروج والتحديث السريع ---
 def load_data_to_session():
     if 'db_users' not in st.session_state or st.session_state.get('force_reload', False):
         try:
@@ -208,7 +208,7 @@ def to_excel_bytes(df):
 
 # ==================== تسجيل الدخول ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء الفائق</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
@@ -330,7 +330,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title">⚡ نظام تتبع الشراء الفائق</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -429,10 +429,8 @@ else:
         
         if not df_all_p.empty:
             df_review = df_all_p[(df_all_p["status"] == 'قيد المراجعة') & (df_all_p["hospital"] == review_hospital)]
-            df_all_system = df_all_p[df_all_p["hospital"] == review_hospital]
         else:
             df_review = pd.DataFrame()
-            df_all_system = pd.DataFrame()
         
         if not df_review.empty:
             df_review_view = df_review.rename(columns={
@@ -532,22 +530,43 @@ else:
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
-    # ==================== الشاشة الثالثة ====================
+    # ==================== الشاشة الثالثة (الاعتماد النهائي - مستقلة لكل مستشفى ومع الإكسل) ====================
     elif selected_screen == "الشاشة 3: الاعتماد النهائي":
-        st.header("✅ الشاشة الثالثة: الاعتماد النهائي")
+        approve_hospital = st.session_state.user_hospital
+        if "مدير النظام (Admin)" in st.session_state.user_roles:
+            approve_hospital = st.selectbox("اختيار مستشفى للاعتماد النهائي:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="app_hosp_sb")
+
+        st.header(f"✅ الشاشة الثالثة: الاعتماد النهائي ({approve_hospital})")
         df_all_p = st.session_state.db_purchases
-        df_approve = df_all_p[df_all_p["status"] == 'بانتظار الاعتماد'] if not df_all_p.empty else pd.DataFrame()
+        
+        # زر تصدير المعتمدة نهائياً لإكسل
+        df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
+        if not df_all_approved.empty:
+            excel_bytes = to_excel_bytes(df_all_approved)
+            st.download_button(
+                label="📥 تصدير جميع الطلبات المعتمدة نهائياً إلى ملف Excel (.xls)",
+                data=excel_bytes,
+                file_name=f"approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
+            )
+            st.markdown("---")
+
+        df_approve = df_all_p[(df_all_p["status"] == 'بانتظار الاعتماد') & (df_all_p["hospital"] == approve_hospital)] if not df_all_p.empty else pd.DataFrame()
         
         if not df_approve.empty:
             df_approve_view = df_approve.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة"
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reviewed_at": "تاريخ المراجعة"
             })
+            
+            st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
             event_app = st.dataframe(df_approve_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
                 app_req_id = int(df_approve_view.iloc[sel_rows_app[0]]["رقم الطلب"])
+                st.markdown("---")
+                st.subheader(f"⚖️ اتخاذ القرار النهائي للطلب رقم: {app_req_id}")
                 with st.form("approval_action_form"):
                     approver_notes = st.text_input("ملاحظات المعتمد")
                     app_action = st.selectbox("قرار الاعتماد", ["اعتماد الطلب نهائياً", "رفض الطلب نهائياً"])
@@ -566,7 +585,7 @@ else:
                         st.success("تم اعتماد القرار بنجاح!")
                         st.rerun()
         else:
-            st.info("لا توجد طلبات بانتظار الاعتماد.")
+            st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
 
     # ==================== الشاشة الرابعة (إدارة الصلاحيات والحذف والإضافة) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
