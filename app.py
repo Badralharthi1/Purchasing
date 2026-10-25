@@ -81,7 +81,7 @@ def load_data_to_session():
         recs = ws_users.get_all_records()
         if not recs:
             admin_pw = make_hashes("admin123")
-            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد,اعتماد لجنة الشراء الطارئ"
             ws_users.update([
                 ["username", "password", "roles", "status", "hospital"],
                 ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
@@ -205,12 +205,12 @@ def sync_name_changed():
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
-# ==================== تسجيل الدخول ====================
+# ==================== تسجيل الدخول والاستعادة ====================
 if not st.session_state.logged_in:
     st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
+    auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد", "نسيت كلمة المرور؟"], horizontal=True)
     st.markdown("---")
     
     if auth_mode == "تسجيل الدخول":
@@ -249,7 +249,7 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
-            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد"]
+            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles, default=[])
             
             if st.form_submit_button("إرسال طلب التسجيل"):
@@ -264,6 +264,32 @@ if not st.session_state.logged_in:
                         st.success("✅ تم إرسال طلبك بنجاح!")
                 else:
                     st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى والصلاحية.")
+
+    elif auth_mode == "نسيت كلمة المرور؟":
+        st.subheader("🔄 استعادة وتغيير كلمة المرور")
+        with st.form("forgot_password_form"):
+            f_user = st.text_input("اسم المستخدم")
+            f_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
+            f_new_pass1 = st.text_input("كلمة المرور الجديدة", type="password")
+            f_new_pass2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password")
+            
+            if st.form_submit_button("تحديث كلمة المرور"):
+                df_users = st.session_state.db_users
+                user_match = df_users[(df_users["username"] == f_user) & (df_users["hospital"] == f_hosp)]
+                
+                if user_match.empty:
+                    st.error("❌ اسم المستخدم أو المستشفى غير مطابق للبيانات المسجلة.")
+                elif f_new_pass1 != f_new_pass2:
+                    st.error("❌ كلمة المرور الجديدة وتأكيدها غير متطابقين.")
+                elif len(f_new_pass1) < 4:
+                    st.error("❌ كلمة المرور قصيرة جداً.")
+                else:
+                    ws_users = get_worksheet("users")
+                    cell = ws_users.find(f_user)
+                    if cell:
+                        ws_users.update_cell(cell.row, 2, make_hashes(f_new_pass1))
+                        load_data_to_session()
+                        st.success("✅ تم تغيير كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول.")
 
 # ==================== الواجهة الرئيسية ====================
 else:
@@ -321,6 +347,8 @@ else:
         screens.append("الشاشة 2: المراجعة (مستقلة لكل مستشفى)")
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 3: الاعتماد النهائي")
+    if "اعتماد لجنة الشراء الطارئ" in roles or "مدير النظام (Admin)" in roles:
+        screens.append("الشاشة 6: اعتماد لجنة الشراء الطارئ")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 4: إدارة الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
@@ -618,6 +646,90 @@ else:
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
 
+    # ==================== الشاشة السادسة (اعتماد لجنة الشراء الطارئ) ====================
+    elif selected_screen == "الشاشة 6: اعتماد لجنة الشراء الطارئ":
+        emergency_hospital = st.session_state.user_hospital
+        if "مدير النظام (Admin)" in st.session_state.user_roles:
+            emergency_hospital = st.selectbox("اختيار مستشفى للجنة الشراء الطارئ:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="emg_hosp_sb")
+
+        st.header(f"🚨 الشاشة السادسة: اعتماد لجنة الشراء الطارئ ({emergency_hospital})")
+        df_all_p = st.session_state.db_purchases
+        
+        df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
+        if not df_all_emergency_approved.empty:
+            excel_bytes_emg = to_excel_bytes(df_all_emergency_approved)
+            st.download_button(
+                label="📥 تصدير جميع طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
+                data=excel_bytes_emg,
+                file_name=f"emergency_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
+            )
+            st.markdown("---")
+
+        df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد') & (df_all_p["hospital"] == emergency_hospital)] if not df_all_p.empty else pd.DataFrame()
+        
+        if not df_emergency.empty:
+            df_emg_view = df_emergency.rename(columns={
+                "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب"
+            })
+            
+            st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
+            event_emg = st.dataframe(df_emg_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
+            
+            if sel_rows_emg:
+                emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
+                current_emg_row = df_all_p[df_all_p["id"] == emg_req_id]
+                if not current_emg_row.empty:
+                    co_emg = current_emg_row.iloc[0]
+                    st.markdown("---")
+                    st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
+                    with st.form("emergency_action_form"):
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            emg_item_number = st.text_input("رقم البند", value=str(co_emg["item_number"]), key="emg_in")
+                            emg_nupco_number = st.text_input("رقم نوبكو", value=str(co_emg["nupco_number"]), key="emg_nu")
+                            emg_e_market_code = st.text_input("كود السوق", value=str(co_emg["e_market_code"]), key="emg_em")
+                        with c2:
+                            emg_item_name = st.text_input("اسم الصنف", value=str(co_emg["item_name"]), key="emg_na")
+                            emg_unit_price = st.number_input("السعر الأفرادي", value=float(co_emg["unit_price"]), min_value=0.0, key="emg_pr")
+                            emg_quantity = st.number_input("الكمية", value=int(co_emg["quantity"]), min_value=1, step=1, key="emg_qu")
+                        with c3:
+                            emg_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"], index=0, key="emg_im")
+                            emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
+                        
+                        emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
+                        emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد طوارئ نهائياً", "رفض طلب الطوارئ"], key="emg_ac")
+                        
+                        if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
+                            emg_total = emg_unit_price * emg_quantity
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            emg_final_status = "معتمد طوارئ نهائياً" if emg_action == "اعتماد طوارئ نهائياً" else "مرفوض في الطوارئ"
+                            
+                            ws_p = get_worksheet("purchases")
+                            all_rows = ws_p.get_all_records()
+                            for idx, row in enumerate(all_rows, start=2):
+                                if row.get("id") == emg_req_id:
+                                    ws_p.update_cell(idx, 4, str(emg_item_number))
+                                    ws_p.update_cell(idx, 5, str(emg_nupco_number))
+                                    ws_p.update_cell(idx, 6, str(emg_e_market_code))
+                                    ws_p.update_cell(idx, 7, str(emg_item_name))
+                                    ws_p.update_cell(idx, 8, float(emg_unit_price))
+                                    ws_p.update_cell(idx, 9, int(emg_quantity))
+                                    ws_p.update_cell(idx, 10, float(emg_total))
+                                    ws_p.update_cell(idx, 11, str(emg_importance))
+                                    ws_p.update_cell(idx, 12, str(emg_reason))
+                                    ws_p.update_cell(idx, 13, str(emg_final_status))
+                                    ws_p.update_cell(idx, 16, str(now_str))
+                                    ws_p.update_cell(idx, 18, str(emg_notes))
+                                    break
+                            load_data_to_session()
+                            st.success("✅ تم اعتماد وتحديث طلب الشراء الطارئ بنجاح!")
+                            st.rerun()
+        else:
+            st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({emergency_hospital}).")
+
     # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
@@ -670,7 +782,7 @@ else:
                     
                     with st.form("direct_user_edit_form"):
                         updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
-                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ", "مدير النظام (Admin)"]
                         updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
                         status_options = ["معتمد", "قيد الانتظار", "موقوف"]
                         updated_status = st.selectbox("حالة الحساب", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
@@ -692,7 +804,7 @@ else:
                     new_u_name = st.text_input("اسم المستخدم الجديد")
                     new_u_pass = st.text_input("كلمة المرور", type="password")
                     new_u_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
-                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ", "مدير النظام (Admin)"]
                     new_u_roles = st.multiselect("الصلاحيات", all_roles_options, default=["رفع طلبات"])
                     
                     if st.form_submit_button("إضافة المستخدم"):
@@ -725,19 +837,19 @@ else:
             total_budget = df_all['total_cost'].sum() if 'total_cost' in df_all.columns else 0.0
             pending_review = len(df_all[df_all['status'] == 'قيد المراجعة'])
             pending_approve = len(df_all[df_all['status'] == 'بانتظار الاعتماد'])
-            approved_count = len(df_all[df_all['status'] == 'معتمد نهائياً'])
+            approved_count = len(df_all[df_all['status'].str.contains('معتمد', na=False)])
             rejected_count = len(df_all[df_all['status'].str.contains('مرفوض', na=False)])
             
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("إجمالي الطلبات", total_orders)
             c2.metric("إجمالي التكاليف", f"{total_budget:,.2f} ر.س")
             c3.metric("الطلبات المعلقة", pending_review + pending_approve)
-            c4.metric("الطلبات المعتمدة نهائياً", approved_count)
+            c4.metric("إجمالي المعتمدة", approved_count)
             
             st.markdown("---")
             rc1, rc2, rc3 = st.columns(3)
             rc1.metric("🔍 قيد المراجعة", pending_review)
-            rc2.metric("⏳ بانتظار الاعتماد النهائي", pending_approve)
+            rc2.metric("⏳ بانتظار الاعتماد", pending_approve)
             rc3.metric("🚫 الطلبات المرفوضة", rejected_count)
             
             st.markdown("---")
@@ -753,7 +865,7 @@ else:
             
             st.markdown("---")
             st.subheader("📋 تفاصيل الطلبات المعتمدة نهائياً")
-            df_app_dash = df_all[df_all['status'] == 'معتمد نهائياً']
+            df_app_dash = df_all[df_all['status'].str.contains('معتمد', na=False)]
             if not df_app_dash.empty:
                 st.dataframe(df_app_dash, use_container_width=True)
             else:
