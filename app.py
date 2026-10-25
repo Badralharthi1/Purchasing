@@ -347,9 +347,9 @@ else:
     if "رفع طلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)")
     if "مراجعة الطلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 2: المراجعة (مستقلة لكل مستشفى)")
+        screens.append("الشاشة 2: إدارة التخطيط بالمستشفى")
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 3: الاعتماد النهائي")
+        screens.append("الشاشة 3: إدارة التخطيط بالإمداد")
     if "اعتماد لجنة الشراء الطارئ" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 4: اعتماد لجنة الشراء الطارئ")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
@@ -455,13 +455,13 @@ else:
             })
         st.dataframe(df_my_orders, use_container_width=True)
 
-    # ==================== الشاشة الثانية ====================
-    elif selected_screen == "الشاشة 2: المراجعة (مستقلة لكل مستشفى)":
+    # ==================== الشاشة الثانية (إدارة التخطيط بالمستشفى) ====================
+    elif selected_screen == "الشاشة 2: إدارة التخطيط بالمستشفى":
         review_hospital = st.session_state.user_hospital
         if "مدير النظام (Admin)" in st.session_state.user_roles:
             review_hospital = st.selectbox("اختيار مستشفى للمراجعة:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0)
 
-        st.header(f"🔍 الشاشة الثانية: مراجعة الطلبات ({review_hospital})")
+        st.header(f"🔍 الشاشة الثانية: إدارة التخطيط بالمستشفى ({review_hospital})")
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
@@ -565,13 +565,13 @@ else:
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
-    # ==================== الشاشة الثالثة (الاعتماد النهائي) ====================
-    elif selected_screen == "الشاشة 3: الاعتماد النهائي":
+    # ==================== الشاشة الثالثة (إدارة التخطيط بالإمداد) ====================
+    elif selected_screen == "الشاشة 3: إدارة التخطيط بالإمداد":
         approve_hospital = st.session_state.user_hospital
         if "مدير النظام (Admin)" in st.session_state.user_roles:
-            approve_hospital = st.selectbox("اختيار مستشفى للاعتماد النهائي:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="app_hosp_sb")
+            approve_hospital = st.selectbox("اختيار مستشفى للإعتماد:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="app_hosp_sb")
 
-        st.header(f"✅ الشاشة الثالثة: الاعتماد النهائي ({approve_hospital})")
+        st.header(f"✅ الشاشة الثالثة: إدارة التخطيط بالإمداد ({approve_hospital})")
         df_all_p = st.session_state.db_purchases
         
         df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
