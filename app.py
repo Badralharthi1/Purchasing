@@ -648,14 +648,17 @@ else:
 
     # ==================== الشاشة السادسة (اعتماد لجنة الشراء الطارئ) ====================
     elif selected_screen == "الشاشة 6: اعتماد لجنة الشراء الطارئ":
-        emergency_hospital = st.session_state.user_hospital
-        if "مدير النظام (Admin)" in st.session_state.user_roles:
-            emergency_hospital = st.selectbox("اختيار مستشفى للجنة الشراء الطارئ:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="emg_hosp_sb")
+        emg_hospital_selection = ["جميع المستشفيات"] + HOSPITALS_LIST
+        selected_emg_filter = st.selectbox("اختيار المستشفى للجنة الشراء الطارئ:", emg_hospital_selection, index=0, key="emg_hosp_sb")
 
-        st.header(f"🚨 الشاشة السادسة: اعتماد لجنة الشراء الطارئ ({emergency_hospital})")
+        st.header(f"🚨 الشاشة السادسة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
+        # زر وتصدير كل طلبات الطوارئ المعتمدة لإكسل
         df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
+        if selected_emg_filter != "جميع المستشفيات" and not df_all_emergency_approved.empty:
+            df_all_emergency_approved = df_all_emergency_approved[df_all_emergency_approved["hospital"] == selected_emg_filter]
+
         if not df_all_emergency_approved.empty:
             excel_bytes_emg = to_excel_bytes(df_all_emergency_approved)
             st.download_button(
@@ -666,7 +669,13 @@ else:
             )
             st.markdown("---")
 
-        df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد') & (df_all_p["hospital"] == emergency_hospital)] if not df_all_p.empty else pd.DataFrame()
+        # فلترة طلبات الطوارئ (الحرجة جداً وبانتظار الاعتماد)
+        if not df_all_p.empty:
+            df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد')]
+            if selected_emg_filter != "جميع المستشفيات":
+                df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
+        else:
+            df_emergency = pd.DataFrame()
         
         if not df_emergency.empty:
             df_emg_view = df_emergency.rename(columns={
@@ -728,7 +737,7 @@ else:
                             st.success("✅ تم اعتماد وتحديث طلب الشراء الطارئ بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({emergency_hospital}).")
+            st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({selected_emg_filter}).")
 
     # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
