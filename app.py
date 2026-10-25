@@ -119,6 +119,12 @@ def load_data_to_session():
                 df_p.columns = [str(c).strip() for c in df_p.columns]
                 if "id" in df_p.columns:
                     df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce")
+                if "unit_price" in df_p.columns:
+                    df_p["unit_price"] = pd.to_numeric(df_p["unit_price"], errors="coerce").fillna(0.0)
+                if "quantity" in df_p.columns:
+                    df_p["quantity"] = pd.to_numeric(df_p["quantity"], errors="coerce").fillna(1).astype(int)
+                if "total_cost" in df_p.columns:
+                    df_p["total_cost"] = pd.to_numeric(df_p["total_cost"], errors="coerce").fillna(0.0)
                 st.session_state.db_purchases = df_p
         except Exception:
             st.session_state.db_purchases = pd.DataFrame()
@@ -202,7 +208,7 @@ def to_excel_bytes(df):
 
 # ==================== تسجيل الدخول ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء (أداء صاروخي)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء الفائق</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد"], horizontal=True)
@@ -429,7 +435,7 @@ else:
             df_all_system = pd.DataFrame()
         
         if not df_review.empty:
-            df_review = df_review.rename(columns={
+            df_review_view = df_review.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
                 "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق", "item_name": "اسم الصنف",
                 "unit_price": "السعر الأفرادي", "quantity": "الكمية", "total_cost": "الإجمالي",
@@ -437,19 +443,21 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
-            nupco_list_filter = [n for n in df_review["رقم نوبكو"].dropna().unique() if str(n).strip() != ""]
+            nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
             
             target_df = df_review
+            target_df_view = df_review_view
             if nupco_filter != "الكل":
-                target_df = df_review[df_review["رقم نوبكو"] == nupco_filter]
+                target_df = df_review[df_review["nupco_number"] == nupco_filter]
+                target_df_view = df_review_view[df_review_view["رقم نوبكو"] == nupco_filter]
                 if len(target_df) > 1:
                     if st.button(f"🔀 دمج الطلبات الـ ({len(target_df)}) برقم نوبكو {nupco_filter}", type="primary"):
                         ws_p = get_worksheet("purchases")
                         all_rows = ws_p.get_all_records()
-                        ids = target_df["رقم الطلب"].tolist()
-                        total_qty = target_df["الكمية"].sum()
-                        first_price = target_df["السعر الأفرادي"].iloc[0]
+                        ids = target_df["id"].tolist()
+                        total_qty = target_df["quantity"].sum()
+                        first_price = target_df["unit_price"].iloc[0]
                         total_cost_merged = total_qty * first_price
                         primary_id = ids[0]
                         
@@ -468,11 +476,11 @@ else:
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
 
-            event = st.dataframe(target_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event = st.dataframe(target_df_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
-                req_id = int(target_df.iloc[selected_rows[0]]["رقم الطلب"])
+                req_id = int(target_df_view.iloc[selected_rows[0]]["رقم الطلب"])
                 current_order_row = df_all_p[df_all_p["id"] == req_id]
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
@@ -522,7 +530,7 @@ else:
                             st.success("تم التحديث بنجاح!")
                             st.rerun()
         else:
-            st.info("لا توجد طلبات معلقة للمراجعة.")
+            st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
     # ==================== الشاشة الثالثة ====================
     elif selected_screen == "الشاشة 3: الاعتماد النهائي":
@@ -560,23 +568,152 @@ else:
         else:
             st.info("لا توجد طلبات بانتظار الاعتماد.")
 
-    # ==================== الشاشة الرابعة ====================
+    # ==================== الشاشة الرابعة (إدارة الصلاحيات والحذف والإضافة) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
             st.error("❌ عذراً، مخصص للأدمن فقط.")
         else:
-            st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين")
-            df_users = st.session_state.db_users
-            st.dataframe(df_users, use_container_width=True)
+            st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
+            
+            tab1, tab2 = st.tabs(["قائمة المستخدمين والحذف", "إضافة مستخدم جديد"])
+            
+            with tab1:
+                df_users = st.session_state.db_users
+                if not df_users.empty:
+                    for idx, row in df_users.iterrows():
+                        u_name = row["username"]
+                        u_hosp = row["hospital"] or "مجمع الملك فيصل"
+                        u_roles = row["roles"]
+                        u_status = row["status"]
+                        
+                        col1, col2, col3, col4, col5 = st.columns([2, 2, 3, 2, 1])
+                        col1.write(u_name)
+                        col2.write(u_hosp)
+                        col3.write(u_roles)
+                        col4.write(u_status)
+                        
+                        with col5:
+                            if st.button("🗑️", key=f"del_u_{u_name}"):
+                                if u_name == "admin":
+                                    st.error("لا يمكن حذف المدير الأساسي.")
+                                elif u_name == st.session_state.username:
+                                    st.error("لا يمكنك حذف حسابك الحالي.")
+                                else:
+                                    ws_u = get_worksheet("users")
+                                    cell = ws_u.find(u_name)
+                                    if cell:
+                                        ws_u.delete_rows(cell.row)
+                                        st.session_state.force_reload = True
+                                        load_data_to_session()
+                                        st.success(f"تم حذف المستخدم {u_name}")
+                                        st.rerun()
+                        st.markdown("---")
+                
+                st.subheader("👤 تعديل صلاحيات وحالة مستخدم")
+                if not df_users.empty:
+                    usernames_list = df_users["username"].tolist()
+                    selected_target_user = st.selectbox("اختر مستخدم للتعديل", usernames_list)
+                    
+                    target_row = df_users[df_users["username"] == selected_target_user].iloc[0]
+                    curr_roles = target_row["roles"].split(",") if target_row["roles"] else []
+                    curr_status = target_row["status"]
+                    curr_hosp = target_row["hospital"] if target_row["hospital"] in HOSPITALS_LIST else HOSPITALS_LIST[0]
+                    
+                    with st.form("direct_user_edit_form"):
+                        updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
+                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                        updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
+                        status_options = ["معتمد", "قيد الانتظار", "موقوف"]
+                        updated_status = st.selectbox("حالة الحساب", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
+                        
+                        if st.form_submit_button("حفظ التعديلات"):
+                            ws_u = get_worksheet("users")
+                            cell = ws_u.find(selected_target_user)
+                            if cell:
+                                ws_u.update_cell(cell.row, 3, ",".join(updated_roles))
+                                ws_u.update_cell(cell.row, 4, str(updated_status))
+                                ws_u.update_cell(cell.row, 5, str(updated_hosp))
+                                st.session_state.force_reload = True
+                                load_data_to_session()
+                                st.success("تم تحديث المستخدم بنجاح!")
+                                st.rerun()
 
-    # ==================== الشاشة الخامسة ====================
+            with tab2:
+                with st.form("add_new_user_form"):
+                    st.subheader("إضافة حساب مستخدم جديد مباشرة")
+                    new_u_name = st.text_input("اسم المستخدم الجديد")
+                    new_u_pass = st.text_input("كلمة المرور", type="password")
+                    new_u_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
+                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                    new_u_roles = st.multiselect("الصلاحيات", all_roles_options, default=["رفع طلبات"])
+                    
+                    if st.form_submit_button("إضافة المستخدم"):
+                        if not new_u_name.strip() or not new_u_pass.strip():
+                            st.error("الرجاء إدخال اسم المستخدم وكلمة المرور.")
+                        else:
+                            df_users = st.session_state.db_users
+                            if not df_users[df_users["username"] == new_u_name].empty:
+                                st.error("اسم المستخدم موجود مسبقاً.")
+                            else:
+                                ws_u = get_worksheet("users")
+                                ws_u.append_row([new_u_name, make_hashes(new_u_pass), ",".join(new_u_roles), "معتمد", new_u_hosp])
+                                st.session_state.force_reload = True
+                                load_data_to_session()
+                                st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح!")
+                                st.rerun()
+
+    # ==================== الشاشة الخامسة (Dashboard التفصيلية) ====================
     elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة المؤشرات (Dashboard)")
+        st.header("📊 الشاشة الخامسة: لوحة المؤشرات والإحصائيات العامة (Dashboard)")
+        
         df_all = st.session_state.db_purchases
+        users_df = st.session_state.db_users
+        
+        dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
+        if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
+            df_all = df_all[df_all['hospital'] == dash_hosp_filter]
+        
         if not df_all.empty:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("إجمالي الطلبات", len(df_all))
-            c2.metric("الإجمالي الكلي", f"{df_all['total_cost'].sum():,.2f} ر.س")
-            c3.metric("الطلبات المعتمدة", len(df_all[df_all['status'] == 'معتمد نهائياً']))
+            total_orders = len(df_all)
+            total_budget = df_all['total_cost'].sum() if 'total_cost' in df_all.columns else 0.0
+            pending_review = len(df_all[df_all['status'] == 'قيد المراجعة'])
+            pending_approve = len(df_all[df_all['status'] == 'بانتظار الاعتماد'])
+            approved_count = len(df_all[df_all['status'] == 'معتمد نهائياً'])
+            rejected_count = len(df_all[df_all['status'].str.contains('مرفوض', na=False)])
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("إجمالي الطلبات", total_orders)
+            c2.metric("إجمالي التكاليف", f"{total_budget:,.2f} ر.س")
+            c3.metric("الطلبات المعلقة", pending_review + pending_approve)
+            c4.metric("الطلبات المعتمدة نهائياً", approved_count)
+            
+            st.markdown("---")
+            rc1, rc2, rc3 = st.columns(3)
+            rc1.metric("🔍 قيد المراجعة", pending_review)
+            rc2.metric("⏳ بانتظار الاعتماد النهائي", pending_approve)
+            rc3.metric("🚫 الطلبات المرفوضة", rejected_count)
+            
+            st.markdown("---")
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.subheader("🏥 توزيع الطلبات حسب المستشفى")
+                if 'hospital' in df_all.columns:
+                    st.bar_chart(df_all['hospital'].value_counts())
+            with col_d2:
+                st.subheader("📌 تباين حالات الطلبات في النظام")
+                if 'status' in df_all.columns:
+                    st.bar_chart(df_all['status'].value_counts())
+            
+            st.markdown("---")
+            st.subheader("📋 تفاصيل الطلبات المعتمدة نهائياً")
+            df_app_dash = df_all[df_all['status'] == 'معتمد نهائياً']
+            if not df_app_dash.empty:
+                st.dataframe(df_app_dash, use_container_width=True)
+            else:
+                st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
         else:
-            st.info("لا توجد بيانات مسجلة.")
+            st.info("لا توجد بيانات مسجلة في النظام بعد.")
+        
+        st.markdown("---")
+        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
+        st.dataframe(users_df, use_container_width=True)
