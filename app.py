@@ -205,7 +205,7 @@ def sync_name_changed():
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
-# ==================== تسجيل الدخول والاستعادة ====================
+# ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
     st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
@@ -236,6 +236,8 @@ if not st.session_state.logged_in:
                             st.session_state.user_hospital = hosp_val or "مجمع الملك فيصل"
                             st.success("تم تسجيل الدخول بنجاح!")
                             st.rerun()
+                        elif status_val == "قيد إعادة تعيين كلمة المرور":
+                            st.warning("⏳ طلب تغيير كلمة المرور قيد الانتظار لموافقة مدير النظام (الأدمن).")
                         else:
                             st.warning("⚠️ حسابك قيد الانتظار أو موقوف ولم يتم اعتماده بعد.")
                     else:
@@ -266,14 +268,14 @@ if not st.session_state.logged_in:
                     st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى والصلاحية.")
 
     elif auth_mode == "نسيت كلمة المرور؟":
-        st.subheader("🔄 استعادة وتغيير كلمة المرور")
+        st.subheader("🔄 طلب إعادة تعيين كلمة المرور (يتطلب موافقة الأدمن)")
         with st.form("forgot_password_form"):
             f_user = st.text_input("اسم المستخدم")
             f_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
             f_new_pass1 = st.text_input("كلمة المرور الجديدة", type="password")
             f_new_pass2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password")
             
-            if st.form_submit_button("تحديث كلمة المرور"):
+            if st.form_submit_button("إرسال طلب تغيير كلمة المرور للأدمن"):
                 df_users = st.session_state.db_users
                 user_match = df_users[(df_users["username"] == f_user) & (df_users["hospital"] == f_hosp)]
                 
@@ -288,8 +290,9 @@ if not st.session_state.logged_in:
                     cell = ws_users.find(f_user)
                     if cell:
                         ws_users.update_cell(cell.row, 2, make_hashes(f_new_pass1))
+                        ws_users.update_cell(cell.row, 4, "قيد إعادة تعيين كلمة المرور")
                         load_data_to_session()
-                        st.success("✅ تم تغيير كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول.")
+                        st.success("✅ تم إرسال طلب إعادة تعيين كلمة المرور بنجاح! يرجى التواصل مع مدير النظام (الأدمن) للموافقة واعتماد الطلب.")
 
 # ==================== الواجهة الرئيسية ====================
 else:
@@ -654,7 +657,6 @@ else:
         st.header(f"🚨 الشاشة السادسة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
-        # زر وتصدير كل طلبات الطوارئ المعتمدة لإكسل
         df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
         if selected_emg_filter != "جميع المستشفيات" and not df_all_emergency_approved.empty:
             df_all_emergency_approved = df_all_emergency_approved[df_all_emergency_approved["hospital"] == selected_emg_filter]
@@ -669,7 +671,6 @@ else:
             )
             st.markdown("---")
 
-        # فلترة طلبات الطوارئ (الحرجة جداً وبانتظار الاعتماد)
         if not df_all_p.empty:
             df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد')]
             if selected_emg_filter != "جميع المستشفيات":
@@ -739,7 +740,7 @@ else:
         else:
             st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({selected_emg_filter}).")
 
-    # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
+    # ==================== الشاشة الرابعة (إدارة الصلاحيات والموافقة على كلمات المرور) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
             st.error("❌ عذراً، مخصص للأدمن فقط.")
@@ -779,7 +780,7 @@ else:
                                         st.rerun()
                         st.markdown("---")
                 
-                st.subheader("👤 تعديل صلاحيات وحالة مستخدم")
+                st.subheader("👤 تعديل صلاحيات وحالة مستخدم (الموافقة على الحسابات وكلمات المرور)")
                 if not df_users.empty:
                     usernames_list = df_users["username"].tolist()
                     selected_target_user = st.selectbox("اختر مستخدم للتعديل", usernames_list)
@@ -793,10 +794,10 @@ else:
                         updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
                         all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ", "مدير النظام (Admin)"]
                         updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
-                        status_options = ["معتمد", "قيد الانتظار", "موقوف"]
-                        updated_status = st.selectbox("حالة الحساب", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
+                        status_options = ["معتمد", "قيد الانتظار", "قيد إعادة تعيين كلمة المرور", "موقوف"]
+                        updated_status = st.selectbox("حالة الحساب (اختر معتمد للموافقة)", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
                         
-                        if st.form_submit_button("حفظ التعديلات"):
+                        if st.form_submit_button("حفظ التعديلات والموافقة"):
                             ws_u = get_worksheet("users")
                             cell = ws_u.find(selected_target_user)
                             if cell:
@@ -804,7 +805,7 @@ else:
                                 ws_u.update_cell(cell.row, 4, str(updated_status))
                                 ws_u.update_cell(cell.row, 5, str(updated_hosp))
                                 load_data_to_session()
-                                st.success("تم تحديث المستخدم بنجاح!")
+                                st.success("تم تحديث المستخدم والموافقة عليه بنجاح!")
                                 st.rerun()
 
             with tab2:
