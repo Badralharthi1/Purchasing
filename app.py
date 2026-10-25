@@ -74,7 +74,7 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- إدارة الذاكرة المحلية المؤقتة والربط السحابي ---
+# --- إدارة الذاكرة المحلية المؤقتة لضمان السرعة القصوى وعدم الخروج ---
 def load_data_to_session():
     try:
         ws_users = get_worksheet("users")
@@ -129,7 +129,7 @@ def load_data_to_session():
         if 'db_purchases' not in st.session_state:
             st.session_state.db_purchases = pd.DataFrame()
 
-# تحميل البيانات عند بدء التشغيل
+# التحميل المبدئي للبيانات في الجلسة
 if 'db_purchases' not in st.session_state:
     load_data_to_session()
 
@@ -260,8 +260,7 @@ if not st.session_state.logged_in:
                         st.error("❌ اسم المستخدم مستخدم مسبقاً.")
                     else:
                         ws_users = get_worksheet("users")
-                        roles_str = ",".join(requested_roles)
-                        ws_users.append_row([new_user, make_hashes(new_pass), roles_str, "قيد الانتظار", selected_hospital])
+                        ws_users.append_row([new_user, make_hashes(new_pass), ",".join(requested_roles), "قيد الانتظار", selected_hospital])
                         load_data_to_session()
                         st.success("✅ تم إرسال طلبك بنجاح!")
                 else:
@@ -271,12 +270,12 @@ if not st.session_state.logged_in:
 else:
     st.sidebar.title("👤 لوحة التحكم")
     
-    # --- زر تحديث البيانات السريع في القائمة الجانبية ---
+    # --- زر تحديث البيانات اليدوي السريع ---
     if st.sidebar.button("🔄 تحديث البيانات من السحابة", use_container_width=True):
         load_data_to_session()
-        st.sidebar.success("تم التحديث بنجاح!")
+        st.sidebar.success("تم تحديث البيانات بنجاح!")
         st.rerun()
-    
+        
     st.sidebar.markdown("---")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"المستشفى: **{st.session_state.user_hospital}**")
@@ -395,18 +394,24 @@ else:
                 df_all_p = st.session_state.db_purchases
                 new_id = int(df_all_p["id"].max()) + 1 if not df_all_p.empty and not pd.isna(df_all_p["id"].max()) else 1
                 
+                # التحديث الفوري المحلي والسرعة القصوى
+                new_row = {
+                    "id": new_id, "requester": st.session_state.username, "hospital": st.session_state.user_hospital,
+                    "item_number": str_item_num, "nupco_number": str_nupco_num, "e_market_code": e_market_code.strip(),
+                    "item_name": str_item_name, "unit_price": unit_price, "quantity": quantity, "total_cost": total_cost,
+                    "importance_criteria": importance_criteria, "reason": reason, "status": "قيد المراجعة",
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "reviewed_at": "", "approved_at": "",
+                    "reviewer_notes": "", "approver_notes": "", "edit_history": ""
+                }
+                st.session_state.db_purchases = pd.concat([df_all_p, pd.DataFrame([new_row])], ignore_index=True)
+                
+                # المزامنة مع السحابة في الخلفية
                 ws_purchases = get_worksheet("purchases")
-                ws_purchases.append_row([
-                    new_id, st.session_state.username, st.session_state.user_hospital,
-                    str_item_num, str_nupco_num, e_market_code.strip(), str_item_name,
-                    unit_price, quantity, total_cost, importance_criteria, reason,
-                    "قيد المراجعة", datetime.now().strftime("%Y-%m-%d %H:%M"), "", "", "", "", ""
-                ])
-                load_data_to_session()
+                ws_purchases.append_row(list(new_row.values()))
                 
                 st.session_state.clear_form_flag = True
                 st.session_state.reset_fields = True
-                st.success("✅ تم إرسال طلب الشراء بنجاح!")
+                st.success("✅ تم إرسال طلب الشراء بنجاح فوري!")
                 st.rerun()
 
         st.markdown("---")
