@@ -251,7 +251,7 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
-            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ"]
+            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles, default=[])
             
             if st.form_submit_button("إرسال طلب التسجيل"):
@@ -351,11 +351,11 @@ else:
     if "معتمد الطلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 3: الاعتماد النهائي")
     if "اعتماد لجنة الشراء الطارئ" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 6: اعتماد لجنة الشراء الطارئ")
+        screens.append("الشاشة 4: اعتماد لجنة الشراء الطارئ")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 4: إدارة الصلاحيات")
+        screens.append("الشاشة 5: إدارة الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
-        screens.append("الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)")
+        screens.append("الشاشة 6: لوحة التحكّم التفصيلية (Dashboard)")
 
     if not screens:
         st.warning("⚠️ لا توجد صلاحيات مفعلة حالياً.")
@@ -649,12 +649,12 @@ else:
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
 
-    # ==================== الشاشة السادسة (اعتماد لجنة الشراء الطارئ) ====================
-    elif selected_screen == "الشاشة 6: اعتماد لجنة الشراء الطارئ":
+    # ==================== الشاشة الرابعة (اعتماد لجنة الشراء الطارئ) ====================
+    elif selected_screen == "الشاشة 4: اعتماد لجنة الشراء الطارئ":
         emg_hospital_selection = ["جميع المستشفيات"] + HOSPITALS_LIST
         selected_emg_filter = st.selectbox("اختيار المستشفى للجنة الشراء الطارئ:", emg_hospital_selection, index=0, key="emg_hosp_sb")
 
-        st.header(f"🚨 الشاشة السادسة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
+        st.header(f"🚨 الشاشة الرابعة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
         df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
@@ -740,12 +740,12 @@ else:
         else:
             st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({selected_emg_filter}).")
 
-    # ==================== الشاشة الرابعة (إدارة الصلاحيات والموافقة على كلمات المرور) ====================
-    elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
+    # ==================== الشاشة الخامسة (إدارة الصلاحيات) ====================
+    elif selected_screen == "الشاشة 5: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
             st.error("❌ عذراً، مخصص للأدمن فقط.")
         else:
-            st.header("⚙️ الشاشة الرابعة: إدارة المستخدمين والصلاحيات")
+            st.header("⚙️ الشاشة الخامسة: إدارة المستخدمين والصلاحيات")
             
             tab1, tab2 = st.tabs(["قائمة المستخدمين والحذف", "إضافة مستخدم جديد"])
             
@@ -792,7 +792,7 @@ else:
                     
                     with st.form("direct_user_edit_form"):
                         updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
-                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ", "مدير النظام (Admin)"]
+                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
                         updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
                         status_options = ["معتمد", "قيد الانتظار", "قيد إعادة تعيين كلمة المرور", "موقوف"]
                         updated_status = st.selectbox("حالة الحساب (اختر معتمد للموافقة)", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
@@ -814,7 +814,7 @@ else:
                     new_u_name = st.text_input("اسم المستخدم الجديد")
                     new_u_pass = st.text_input("كلمة المرور", type="password")
                     new_u_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
-                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "إدارة الصلاحيات", "عرض الداش بورد", "اعتماد لجنة الشراء الطارئ", "مدير النظام (Admin)"]
+                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
                     new_u_roles = st.multiselect("الصلاحيات", all_roles_options, default=["رفع طلبات"])
                     
                     if st.form_submit_button("إضافة المستخدم"):
@@ -831,9 +831,9 @@ else:
                                 st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح!")
                                 st.rerun()
 
-    # ==================== الشاشة الخامسة (Dashboard التفصيلية) ====================
-    elif selected_screen == "الشاشة 5: لوحة التحكّم التفصيلية (Dashboard)":
-        st.header("📊 الشاشة الخامسة: لوحة المؤشرات والإحصائيات العامة (Dashboard)")
+    # ==================== الشاشة السادسة (Dashboard التفصيلية) ====================
+    elif selected_screen == "الشاشة 6: لوحة التحكّم التفصيلية (Dashboard)":
+        st.header("📊 الشاشة السادسة: لوحة المؤشرات والإحصائيات العامة (Dashboard)")
         
         df_all = st.session_state.db_purchases
         users_df = st.session_state.db_users
