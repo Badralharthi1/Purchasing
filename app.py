@@ -74,7 +74,7 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- إدارة الذاكرة المحلية المؤقتة لضمان التحديث الفوري والربط السحابي ---
+# --- إدارة الذاكرة المحلية المؤقتة والربط السحابي ---
 def load_data_to_session():
     try:
         ws_users = get_worksheet("users")
@@ -129,8 +129,9 @@ def load_data_to_session():
         if 'db_purchases' not in st.session_state:
             st.session_state.db_purchases = pd.DataFrame()
 
-# تحميل البيانات وتحديثها دائماً عند أي تفاعل لضمان الظهور الفوري
-load_data_to_session()
+# تحميل البيانات عند بدء التشغيل
+if 'db_purchases' not in st.session_state:
+    load_data_to_session()
 
 # --- تحميل ملف الإكسل المرجعي للأصناف ---
 @st.cache_data
@@ -269,6 +270,14 @@ if not st.session_state.logged_in:
 # ==================== الواجهة الرئيسية ====================
 else:
     st.sidebar.title("👤 لوحة التحكم")
+    
+    # --- زر تحديث البيانات السريع في القائمة الجانبية ---
+    if st.sidebar.button("🔄 تحديث البيانات من السحابة", use_container_width=True):
+        load_data_to_session()
+        st.sidebar.success("تم التحديث بنجاح!")
+        st.rerun()
+    
+    st.sidebar.markdown("---")
     st.sidebar.write(f"المستخدم: **{st.session_state.username}**")
     st.sidebar.write(f"المستشفى: **{st.session_state.user_hospital}**")
     st.sidebar.write(f"الصلاحيات: **{', '.join(st.session_state.user_roles)}**")
@@ -397,7 +406,7 @@ else:
                 
                 st.session_state.clear_form_flag = True
                 st.session_state.reset_fields = True
-                st.success("✅ تم إرسال طلب الشراء بنجاح وظهر في الشاشات التالية فورا!")
+                st.success("✅ تم إرسال طلب الشراء بنجاح!")
                 st.rerun()
 
         st.markdown("---")
@@ -524,7 +533,7 @@ else:
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
-    # ==================== الشاشة الثالثة (الاعتماد النهائي - مع تعديل كامل وإكسل) ====================
+    # ==================== الشاشة الثالثة (الاعتماد النهائي) ====================
     elif selected_screen == "الشاشة 3: الاعتماد النهائي":
         approve_hospital = st.session_state.user_hospital
         if "مدير النظام (Admin)" in st.session_state.user_roles:
@@ -608,7 +617,7 @@ else:
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
 
-    # ==================== الشاشة الرابعة (إدارة الصلاحيات والحذف والإضافة) ====================
+    # ==================== الشاشة الرابعة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 4: إدارة الصلاحيات":
         if "مدير النظام (Admin)" not in st.session_state.user_roles:
             st.error("❌ عذراً، مخصص للأدمن فقط.")
