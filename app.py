@@ -657,27 +657,24 @@ else:
         st.header(f"🚨 الشاشة الرابعة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
-        # --- زر تصدير طلبات الطوارئ إلى Excel ---
-        df_all_emergency_approved = df_all_p[df_all_p["status"] == 'معتمد طوارئ نهائياً'] if not df_all_p.empty else pd.DataFrame()
-        if selected_emg_filter != "جميع المستشفيات" and not df_all_emergency_approved.empty:
-            df_all_emergency_approved = df_all_emergency_approved[df_all_emergency_approved["hospital"] == selected_emg_filter]
-
-        if not df_all_emergency_approved.empty:
-            excel_bytes_emg = to_excel_bytes(df_all_emergency_approved)
-            st.download_button(
-                label="📥 تصدير طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
-                data=excel_bytes_emg,
-                file_name=f"emergency_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
-                mime="application/vnd.ms-excel"
-            )
-            st.markdown("---")
-
+        # --- تجهيز وتصفية بيانات الشاشة الرابعة الحالية لتصديرها ---
         if not df_all_p.empty:
             df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد')]
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
         else:
             df_emergency = pd.DataFrame()
+
+        # --- زر تصدير قائمة طلبات الطوارئ المعروضة في الشاشة الحالية إلى Excel ---
+        if not df_emergency.empty:
+            excel_bytes_emg = to_excel_bytes(df_emergency)
+            st.download_button(
+                label="📥 تصدير قائمة طلبات الطوارئ الحالية إلى ملف Excel (.xls)",
+                data=excel_bytes_emg,
+                file_name=f"emergency_current_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
+            )
+            st.markdown("---")
         
         if not df_emergency.empty:
             df_emg_view = df_emergency.rename(columns={
