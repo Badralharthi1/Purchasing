@@ -74,63 +74,62 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- إدارة الذاكرة المحلية المؤقتة لضمان عدم الخروج والتحديث السريع ---
+# --- إدارة الذاكرة المحلية المؤقتة لضمان التحديث الفوري والربط السحابي ---
 def load_data_to_session():
-    if 'db_users' not in st.session_state or st.session_state.get('force_reload', False):
-        try:
-            ws_users = get_worksheet("users")
-            recs = ws_users.get_all_records()
-            if not recs:
-                admin_pw = make_hashes("admin123")
-                admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
-                ws_users.update([
-                    ["username", "password", "roles", "status", "hospital"],
-                    ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
-                ])
-                st.session_state.db_users = pd.DataFrame([{
-                    "username": "admin", "password": admin_pw, "roles": admin_roles, "status": "معتمد", "hospital": "مجمع الملك فيصل"
-                }])
-            else:
-                df_u = pd.DataFrame(recs)
-                df_u.columns = [str(c).strip() for c in df_u.columns]
-                st.session_state.db_users = df_u
-        except Exception:
+    try:
+        ws_users = get_worksheet("users")
+        recs = ws_users.get_all_records()
+        if not recs:
+            admin_pw = make_hashes("admin123")
+            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد"
+            ws_users.update([
+                ["username", "password", "roles", "status", "hospital"],
+                ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
+            ])
+            st.session_state.db_users = pd.DataFrame([{
+                "username": "admin", "password": admin_pw, "roles": admin_roles, "status": "معتمد", "hospital": "مجمع الملك فيصل"
+            }])
+        else:
+            df_u = pd.DataFrame(recs)
+            df_u.columns = [str(c).strip() for c in df_u.columns]
+            st.session_state.db_users = df_u
+    except Exception:
+        if 'db_users' not in st.session_state:
             st.session_state.db_users = pd.DataFrame(columns=["username", "password", "roles", "status", "hospital"])
 
-    if 'db_purchases' not in st.session_state or st.session_state.get('force_reload', False):
-        try:
-            ws_p = get_worksheet("purchases")
-            recs_p = ws_p.get_all_records()
-            if not recs_p:
-                ws_p.update([[
-                    "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
-                    "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
-                    "reason", "status", "created_at", "reviewed_at", "approved_at",
-                    "reviewer_notes", "approver_notes", "edit_history"
-                ]])
-                st.session_state.db_purchases = pd.DataFrame(columns=[
-                    "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
-                    "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
-                    "reason", "status", "created_at", "reviewed_at", "approved_at",
-                    "reviewer_notes", "approver_notes", "edit_history"
-                ])
-            else:
-                df_p = pd.DataFrame(recs_p)
-                df_p.columns = [str(c).strip() for c in df_p.columns]
-                if "id" in df_p.columns:
-                    df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce")
-                if "unit_price" in df_p.columns:
-                    df_p["unit_price"] = pd.to_numeric(df_p["unit_price"], errors="coerce").fillna(0.0)
-                if "quantity" in df_p.columns:
-                    df_p["quantity"] = pd.to_numeric(df_p["quantity"], errors="coerce").fillna(1).astype(int)
-                if "total_cost" in df_p.columns:
-                    df_p["total_cost"] = pd.to_numeric(df_p["total_cost"], errors="coerce").fillna(0.0)
-                st.session_state.db_purchases = df_p
-        except Exception:
+    try:
+        ws_p = get_worksheet("purchases")
+        recs_p = ws_p.get_all_records()
+        if not recs_p:
+            ws_p.update([[
+                "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
+                "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
+                "reason", "status", "created_at", "reviewed_at", "approved_at",
+                "reviewer_notes", "approver_notes", "edit_history"
+            ]])
+            st.session_state.db_purchases = pd.DataFrame(columns=[
+                "id", "requester", "hospital", "item_number", "nupco_number", "e_market_code",
+                "item_name", "unit_price", "quantity", "total_cost", "importance_criteria",
+                "reason", "status", "created_at", "reviewed_at", "approved_at",
+                "reviewer_notes", "approver_notes", "edit_history"
+            ])
+        else:
+            df_p = pd.DataFrame(recs_p)
+            df_p.columns = [str(c).strip() for c in df_p.columns]
+            if "id" in df_p.columns:
+                df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce")
+            if "unit_price" in df_p.columns:
+                df_p["unit_price"] = pd.to_numeric(df_p["unit_price"], errors="coerce").fillna(0.0)
+            if "quantity" in df_p.columns:
+                df_p["quantity"] = pd.to_numeric(df_p["quantity"], errors="coerce").fillna(1).astype(int)
+            if "total_cost" in df_p.columns:
+                df_p["total_cost"] = pd.to_numeric(df_p["total_cost"], errors="coerce").fillna(0.0)
+            st.session_state.db_purchases = df_p
+    except Exception:
+        if 'db_purchases' not in st.session_state:
             st.session_state.db_purchases = pd.DataFrame()
-            
-    st.session_state.force_reload = False
 
+# تحميل البيانات وتحديثها دائماً عند أي تفاعل لضمان الظهور الفوري
 load_data_to_session()
 
 # --- تحميل ملف الإكسل المرجعي للأصناف ---
@@ -262,7 +261,6 @@ if not st.session_state.logged_in:
                         ws_users = get_worksheet("users")
                         roles_str = ",".join(requested_roles)
                         ws_users.append_row([new_user, make_hashes(new_pass), roles_str, "قيد الانتظار", selected_hospital])
-                        st.session_state.force_reload = True
                         load_data_to_session()
                         st.success("✅ تم إرسال طلبك بنجاح!")
                 else:
@@ -296,7 +294,6 @@ else:
                     cell = ws_users.find(st.session_state.username)
                     if cell:
                         ws_users.update_cell(cell.row, 2, make_hashes(new_pass1))
-                        st.session_state.force_reload = True
                         load_data_to_session()
                         st.success("✅ تم تغيير كلمة المرور بنجاح!")
 
@@ -396,12 +393,11 @@ else:
                     unit_price, quantity, total_cost, importance_criteria, reason,
                     "قيد المراجعة", datetime.now().strftime("%Y-%m-%d %H:%M"), "", "", "", "", ""
                 ])
-                st.session_state.force_reload = True
                 load_data_to_session()
                 
                 st.session_state.clear_form_flag = True
                 st.session_state.reset_fields = True
-                st.success("✅ تم إرسال طلب الشراء بنجاح بسرعة البرق!")
+                st.success("✅ تم إرسال طلب الشراء بنجاح وظهر في الشاشات التالية فورا!")
                 st.rerun()
 
         st.markdown("---")
@@ -469,7 +465,6 @@ else:
                                 if row.get("id") == remove_id:
                                     ws_p.delete_rows(idx)
                                     break
-                        st.session_state.force_reload = True
                         load_data_to_session()
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
@@ -523,14 +518,13 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            st.session_state.force_reload = True
                             load_data_to_session()
                             st.success("تم التحديث بنجاح!")
                             st.rerun()
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
-    # ==================== الشاشة الثالثة (الاعتماد النهائي - مستقلة لكل مستشفى ومع الإكسل) ====================
+    # ==================== الشاشة الثالثة (الاعتماد النهائي - مع تعديل كامل وإكسل) ====================
     elif selected_screen == "الشاشة 3: الاعتماد النهائي":
         approve_hospital = st.session_state.user_hospital
         if "مدير النظام (Admin)" in st.session_state.user_roles:
@@ -539,7 +533,6 @@ else:
         st.header(f"✅ الشاشة الثالثة: الاعتماد النهائي ({approve_hospital})")
         df_all_p = st.session_state.db_purchases
         
-        # زر تصدير المعتمدة نهائياً لإكسل
         df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
@@ -565,25 +558,53 @@ else:
             
             if sel_rows_app:
                 app_req_id = int(df_approve_view.iloc[sel_rows_app[0]]["رقم الطلب"])
-                st.markdown("---")
-                st.subheader(f"⚖️ اتخاذ القرار النهائي للطلب رقم: {app_req_id}")
-                with st.form("approval_action_form"):
-                    approver_notes = st.text_input("ملاحظات المعتمد")
-                    app_action = st.selectbox("قرار الاعتماد", ["اعتماد الطلب نهائياً", "رفض الطلب نهائياً"])
-                    if st.form_submit_button("تنفيذ القرار"):
-                        ws_p = get_worksheet("purchases")
-                        all_rows = ws_p.get_all_records()
-                        final_status = "معتمد نهائياً" if app_action == "اعتماد الطلب نهائياً" else "مرفوض نهائياً"
-                        for idx, row in enumerate(all_rows, start=2):
-                            if row.get("id") == app_req_id:
-                                ws_p.update_cell(idx, 13, str(final_status))
-                                ws_p.update_cell(idx, 16, str(datetime.now().strftime("%Y-%m-%d %H:%M")))
-                                ws_p.update_cell(idx, 18, str(approver_notes))
-                                break
-                        st.session_state.force_reload = True
-                        load_data_to_session()
-                        st.success("تم اعتماد القرار بنجاح!")
-                        st.rerun()
+                current_order_row = df_all_p[df_all_p["id"] == app_req_id]
+                if not current_order_row.empty:
+                    co = current_order_row.iloc[0]
+                    st.markdown("---")
+                    st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار النهائي رقم: {app_req_id}")
+                    with st.form("approval_action_form"):
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            app_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
+                            app_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
+                            app_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
+                        with c2:
+                            app_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
+                            app_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
+                            app_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
+                        with c3:
+                            app_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                            app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
+                        
+                        approver_notes = st.text_input("ملاحظات المعتمد")
+                        app_action = st.selectbox("قرار الاعتماد", ["اعتماد الطلب نهائياً", "رفض الطلب نهائياً"])
+                        
+                        if st.form_submit_button("حفظ التعديلات وتنفيذ القرار النهائي"):
+                            app_total = app_unit_price * app_quantity
+                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                            final_status = "معتمد نهائياً" if app_action == "اعتماد الطلب نهائياً" else "مرفوض نهائياً"
+                            
+                            ws_p = get_worksheet("purchases")
+                            all_rows = ws_p.get_all_records()
+                            for idx, row in enumerate(all_rows, start=2):
+                                if row.get("id") == app_req_id:
+                                    ws_p.update_cell(idx, 4, str(app_item_number))
+                                    ws_p.update_cell(idx, 5, str(app_nupco_number))
+                                    ws_p.update_cell(idx, 6, str(app_e_market_code))
+                                    ws_p.update_cell(idx, 7, str(app_item_name))
+                                    ws_p.update_cell(idx, 8, float(app_unit_price))
+                                    ws_p.update_cell(idx, 9, int(app_quantity))
+                                    ws_p.update_cell(idx, 10, float(app_total))
+                                    ws_p.update_cell(idx, 11, str(app_importance))
+                                    ws_p.update_cell(idx, 12, str(app_reason))
+                                    ws_p.update_cell(idx, 13, str(final_status))
+                                    ws_p.update_cell(idx, 16, str(now_str))
+                                    ws_p.update_cell(idx, 18, str(approver_notes))
+                                    break
+                            load_data_to_session()
+                            st.success("تم تحديث الطلب واعتماد القرار النهائي بنجاح!")
+                            st.rerun()
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
 
@@ -622,7 +643,6 @@ else:
                                     cell = ws_u.find(u_name)
                                     if cell:
                                         ws_u.delete_rows(cell.row)
-                                        st.session_state.force_reload = True
                                         load_data_to_session()
                                         st.success(f"تم حذف المستخدم {u_name}")
                                         st.rerun()
@@ -652,7 +672,6 @@ else:
                                 ws_u.update_cell(cell.row, 3, ",".join(updated_roles))
                                 ws_u.update_cell(cell.row, 4, str(updated_status))
                                 ws_u.update_cell(cell.row, 5, str(updated_hosp))
-                                st.session_state.force_reload = True
                                 load_data_to_session()
                                 st.success("تم تحديث المستخدم بنجاح!")
                                 st.rerun()
@@ -676,7 +695,6 @@ else:
                             else:
                                 ws_u = get_worksheet("users")
                                 ws_u.append_row([new_u_name, make_hashes(new_u_pass), ",".join(new_u_roles), "معتمد", new_u_hosp])
-                                st.session_state.force_reload = True
                                 load_data_to_session()
                                 st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح!")
                                 st.rerun()
