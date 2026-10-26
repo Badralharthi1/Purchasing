@@ -57,7 +57,7 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# --- الاتصال السحابي ---
+# --- الاتصال السحابي (يتم تحميل البيانات مؤقتاً لتسريع الأداء ولا يتم التحديث إلا بزر الشريط الجانبي) ---
 @st.cache_resource
 def get_gsheet_client():
     raw_json = st.secrets["gcp_json"]
@@ -74,7 +74,7 @@ def get_worksheet(worksheet_name):
     except Exception:
         return sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
 
-# --- إدارة الذاكرة المحلية المؤقتة لضمان التحديث الفوري والربط السحابي ---
+# --- إدارة الذاكرة المحلية المؤقتة ---
 def load_data_to_session():
     try:
         ws_users = get_worksheet("users")
@@ -156,51 +156,12 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-if 'form_counter' not in st.session_state:
-    st.session_state.form_counter = 0
-
-if 'sel_item_num' not in st.session_state:
-    st.session_state.sel_item_num = "-- اختر أو ابحث --"
-if 'sel_nupco_num' not in st.session_state:
-    st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
-if 'sel_item_name' not in st.session_state:
-    st.session_state.sel_item_name = "-- اختر أو ابحث --"
-
-if 'clear_form_flag' not in st.session_state:
-    st.session_state.clear_form_flag = False
-
-def sync_item_num_changed():
-    current_key = f"sb_item_num_{st.session_state.form_counter}"
-    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
-    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
-        m = catalog_df[catalog_df['رقم البند'] == str(val).strip()]
-        if not m.empty:
-            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
-            st.session_state.form_counter += 1
-
-def sync_nupco_changed():
-    current_key = f"sb_nupco_{st.session_state.form_counter}"
-    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
-    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
-        m = catalog_df[catalog_df['رقم نوبكو'] == str(val).strip()]
-        if not m.empty:
-            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
-            st.session_state.form_counter += 1
-
-def sync_name_changed():
-    current_key = f"sb_name_{st.session_state.form_counter}"
-    val = st.session_state.get(current_key, "-- اختر أو ابحث --")
-    if val != "-- اختر أو ابحث --" and not catalog_df.empty:
-        m = catalog_df[catalog_df['اسم الصنف'] == str(val).strip()]
-        if not m.empty:
-            st.session_state.sel_item_num = str(m.iloc[0]['رقم البند'])
-            st.session_state.sel_nupco_num = str(m.iloc[0]['رقم نوبكو'])
-            st.session_state.sel_item_name = str(m.iloc[0]['اسم الصنف'])
-            st.session_state.form_counter += 1
+if 'form_item_number' not in st.session_state:
+    st.session_state.form_item_number = ""
+if 'form_nupco_number' not in st.session_state:
+    st.session_state.form_nupco_number = ""
+if 'form_item_name' not in st.session_state:
+    st.session_state.form_item_name = ""
 
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
@@ -399,76 +360,74 @@ else:
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
-        list_items = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم البند'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
-        list_nupco = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['رقم نوبكو'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
-        list_names = ["-- اختر أو ابحث --"] + (sorted([str(n) for n in catalog_df['اسم الصنف'].unique() if str(n).strip() != ""]) if not catalog_df.empty else [])
-
-        if st.session_state.get('clear_form_flag', False):
-            st.session_state.sel_item_num = "-- اختر أو ابحث --"
-            st.session_state.sel_nupco_num = "-- اختر أو ابحث --"
-            st.session_state.sel_item_name = "-- اختر أو ابحث --"
-            st.session_state.form_counter += 1
-            st.session_state.clear_form_flag = False
-
-        idx_item = list_items.index(st.session_state.sel_item_num) if st.session_state.sel_item_num in list_items else 0
-        idx_nupco = list_nupco.index(st.session_state.sel_nupco_num) if st.session_state.sel_nupco_num in list_nupco else 0
-        idx_name = list_names.index(st.session_state.sel_item_name) if st.session_state.sel_item_name in list_names else 0
-
-        cnt = st.session_state.form_counter
-        def_e_market = "" if not st.session_state.get('reset_fields', False) else ""
-        def_price = 0.0 if not st.session_state.get('reset_fields', False) else 0.0
-        def_qty = 1 if not st.session_state.get('reset_fields', False) else 1
-        def_reason = "" if not st.session_state.get('reset_fields', False) else ""
+        # --- خانة البحث المخصصة وزر الإدراج لتسريع الأداء ---
+        st.subheader("🔍 البحث في دليل الأصناف للإدراج السريع")
         
-        if st.session_state.get('reset_fields', False):
-            st.session_state.reset_fields = False
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            item_num_val = st.selectbox("1. رقم البند *", options=list_items, index=idx_item, key=f"sb_item_num_{cnt}", on_change=sync_item_num_changed)
-            nupco_num_val = st.selectbox("2. رقم نوبكو *", options=list_nupco, index=idx_nupco, key=f"sb_nupco_{cnt}", on_change=sync_nupco_changed)
-            e_market_code = st.text_input("3. كود السوق الالكتروني *", value=def_e_market, key=f"input_e_market_{cnt}")
-
-        with col2:
-            item_name_val = st.selectbox("4. اسم الصنف *", options=list_names, index=idx_name, key=f"sb_name_{cnt}", on_change=sync_name_changed)
-            unit_price = st.number_input("5. السعر الافرادي *", min_value=0.0, step=1.0, value=def_price, key=f"input_unit_price_{cnt}")
-            quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=def_qty, key=f"input_quantity_{cnt}")
-
-        with col3:
-            importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"], key=f"sb_importance_{cnt}")
-            reason = st.text_area("8. السبب / المبررات", value=def_reason, key=f"input_reason_{cnt}")
-
-        total_cost = unit_price * quantity
-        st.markdown(f"**إجمالي التكلفة المحسوبة:** `{total_cost:,.2f} ر.س`")
-
-        if st.button("إرسال الطلب", use_container_width=True):
-            str_item_num = str(item_num_val).strip() if item_num_val != "-- اختر أو ابحث --" else ""
-            str_nupco_num = str(nupco_num_val).strip() if nupco_num_val != "-- اختر أو ابحث --" else ""
-            str_item_name = str(item_name_val).strip() if item_name_val != "-- اختر أو ابحث --" else ""
-
-            if not str_item_num or not str_nupco_num or not e_market_code.strip() or not str_item_name or unit_price <= 0 or quantity <= 0:
-                st.error("❌ يرجى تعبئة كافة الحقول الإلزامية بصورة صحيحة.")
+        catalog_search_options = ["-- اختر للبحث --"]
+        if not catalog_df.empty:
+            # دمج خيارات البحث لتسهيل الوصول (رقم البند - رقم نوبكو - اسم الصنف)
+            catalog_search_options += [
+                f"{row['رقم البند']} | {row['رقم نوبكو']} | {row['اسم الصنف']}" 
+                for _, row in catalog_df.iterrows()
+            ]
+        
+        selected_search_item = st.selectbox("ابحث برقم البند أو رقم نوبكو أو اسم الصنف:", catalog_search_options)
+        
+        if st.button("📥 إدراج البيانات في النموذج"):
+            if selected_search_item != "-- اختر للبحث --":
+                parts = [p.strip() for p in selected_search_item.split("|")]
+                if len(parts) >= 3:
+                    st.session_state.form_item_number = parts[0]
+                    st.session_state.form_nupco_number = parts[1]
+                    st.session_state.form_item_name = parts[2]
+                    st.success("✅ تم إدراج بيانات الصنف بنجاح في النموذج أدناه!")
             else:
-                df_all_p = st.session_state.db_purchases
-                new_id = int(df_all_p["id"].max()) + 1 if not df_all_p.empty and not pd.isna(df_all_p["id"].max()) else 1
-                
-                new_row = {
-                    "id": new_id, "requester": st.session_state.username, "hospital": st.session_state.user_hospital,
-                    "item_number": str_item_num, "nupco_number": str_nupco_num, "e_market_code": e_market_code.strip(),
-                    "item_name": str_item_name, "unit_price": unit_price, "quantity": quantity, "total_cost": total_cost,
-                    "importance_criteria": importance_criteria, "reason": reason, "status": "قيد المراجعة",
-                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "reviewed_at": "", "approved_at": "",
-                    "reviewer_notes": "", "approver_notes": "", "edit_history": ""
-                }
-                
-                ws_purchases = get_worksheet("purchases")
-                ws_purchases.append_row(list(new_row.values()))
-                load_data_to_session()
-                
-                st.session_state.clear_form_flag = True
-                st.session_state.reset_fields = True
-                st.success("✅ تم إرسال طلب الشراء بنجاح وظهر في الشاشات التالية فورا!")
-                st.rerun()
+                st.warning("الرجاء اختيار صنف من القائمة أولاً.")
+
+        st.markdown("---")
+        
+        with st.form("purchase_request_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                item_number_input = st.text_input("1. رقم البند *", value=st.session_state.form_item_number)
+                nupco_number_input = st.text_input("2. رقم نوبكو *", value=st.session_state.form_nupco_number)
+                e_market_code = st.text_input("3. كود السوق الالكتروني *")
+
+            with col2:
+                item_name_input = st.text_input("4. اسم الصنف *", value=st.session_state.form_item_name)
+                unit_price = st.number_input("5. السعر الافرادي *", min_value=0.0, step=1.0, value=0.0)
+                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=1)
+
+            with col3:
+                importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                reason = st.text_area("8. السبب / المبررات")
+
+            submitted = st.form_submit_button("إرسال الطلب")
+            if submitted:
+                if not item_number_input.strip() or not nupco_number_input.strip() or not e_market_code.strip() or not item_name_input.strip() or unit_price <= 0 or quantity <= 0:
+                    st.error("❌ يرجى تعبئة كافة الحقول الإلزامية بصورة صحيحة.")
+                else:
+                    df_all_p = st.session_state.db_purchases
+                    new_id = int(df_all_p["id"].max()) + 1 if not df_all_p.empty and not pd.isna(df_all_p["id"].max()) else 1
+                    
+                    new_row = {
+                        "id": new_id, "requester": st.session_state.username, "hospital": st.session_state.user_hospital,
+                        "item_number": item_number_input.strip(), "nupco_number": nupco_number_input.strip(), "e_market_code": e_market_code.strip(),
+                        "item_name": item_name_input.strip(), "unit_price": unit_price, "quantity": quantity, "total_cost": unit_price * quantity,
+                        "importance_criteria": importance_criteria, "reason": reason, "status": "قيد المراجعة",
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "reviewed_at": "", "approved_at": "",
+                        "reviewer_notes": "", "approver_notes": "", "edit_history": ""
+                    }
+                    
+                    ws_purchases = get_worksheet("purchases")
+                    ws_purchases.append_row(list(new_row.values()))
+                    load_data_to_session()
+                    
+                    st.session_state.form_item_number = ""
+                    st.session_state.form_nupco_number = ""
+                    st.session_state.form_item_name = ""
+                    st.success("✅ تم إرسال طلب الشراء بنجاح!")
+                    st.rerun()
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -569,7 +528,7 @@ else:
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -683,7 +642,7 @@ else:
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -796,7 +755,7 @@ else:
 
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
 
