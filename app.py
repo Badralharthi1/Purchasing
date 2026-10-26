@@ -205,6 +205,21 @@ def sync_name_changed():
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
+# --- دالة تلوين الصفوف بناءً على أيام التأخير ---
+def highlight_delay_rows(row):
+    try:
+        created = pd.to_datetime(row.get('تاريخ الإنشاء') or row.get('created_at'), errors='coerce')
+        if pd.isna(created):
+            return [''] * len(row)
+        days_diff = (datetime.now() - created).days
+        if days_diff >= 3:
+            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row) # أحمر
+        elif days_diff == 1:
+            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) # أصفر
+    except Exception:
+        pass
+    return [''] * len(row)
+
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
     st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
@@ -478,6 +493,8 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
+            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
             
@@ -510,7 +527,8 @@ else:
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
 
-            event = st.dataframe(target_df_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            styled_review_df = target_df_view.style.apply(highlight_delay_rows, axis=1)
+            event = st.dataframe(styled_review_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
@@ -519,7 +537,6 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) بكافة حالاتها ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
                     sel_name = str(co["item_name"]).strip()
@@ -614,11 +631,14 @@ else:
         if not df_approve.empty:
             df_approve_view = df_approve.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reviewed_at": "تاريخ المراجعة"
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
-            event_app = st.dataframe(df_approve_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            
+            styled_app_df = df_approve_view.style.apply(highlight_delay_rows, axis=1)
+            event_app = st.dataframe(styled_app_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
@@ -627,7 +647,6 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
                     sel_name = str(co["item_name"]).strip()
@@ -725,11 +744,14 @@ else:
         if not df_emergency.empty:
             df_emg_view = df_emergency.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
-                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب"
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب", "created_at": "تاريخ الإنشاء"
             })
             
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
-            event_emg = st.dataframe(df_emg_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            
+            styled_emg_df = df_emg_view.style.apply(highlight_delay_rows, axis=1)
+            event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
@@ -738,7 +760,6 @@ else:
                 if not current_emg_row.empty:
                     co_emg = current_emg_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) ---
                     sel_item_num = str(co_emg["item_number"]).strip()
                     sel_nupco = str(co_emg["nupco_number"]).strip()
                     sel_name = str(co_emg["item_name"]).strip()
@@ -929,6 +950,33 @@ else:
             rc1.metric("🔍 قيد المراجعة", pending_review)
             rc2.metric("⏳ بانتظار الاعتماد", pending_approve)
             rc3.metric("🚫 الطلبات المرفوضة", rejected_count)
+            
+            # --- حساب معدل التأخير لكل شاشة (بالأيام) ---
+            st.markdown("---")
+            st.subheader("⏱️ مؤشرات معدل التأخير في اعتماد الطلبات لكل شاشة")
+            
+            # الشاشة الثانية (مراجعة المستشفى): نقيس الطلبات التي حالتها 'قيد المراجعة'
+            df_screen2_pending = df_all[df_all['status'] == 'قيد المراجعة']
+            avg_delay_s2 = 0.0
+            if not df_screen2_pending.empty:
+                dates_s2 = pd.to_datetime(df_screen2_pending['created_at'], errors='coerce')
+                delays_s2 = (datetime.now() - dates_s2).dt.total_seconds() / 86400
+                avg_delay_s2 = delays_s2.mean() if not delays_s2.empty else 0.0
+
+            # الشاشة الثالثة والرابعة (الإمداد / الطوارئ): نقيس الطلبات التي حالتها 'بانتظار الاعتماد'
+            df_screen3_pending = df_all[df_all['status'] == 'بانتظار الاعتماد']
+            avg_delay_s3_4 = 0.0
+            if not df_screen3_pending.empty:
+                # نأخذ تاريخ المراجعة إذا توفر، وإلا تاريخ الإنشاء
+                ref_dates = df_screen3_pending['reviewed_at'].apply(lambda x: x if str(x).strip() != "" else None).fillna(df_screen3_pending['created_at'])
+                dates_s3 = pd.to_datetime(ref_dates, errors='coerce')
+                delays_s3 = (datetime.now() - dates_s3).dt.total_seconds() / 86400
+                avg_delay_s3_4 = delays_s3.mean() if not delays_s3.empty else 0.0
+
+            dc1, dc2, dc3 = st.columns(3)
+            dc1.metric("معدل تأخير الشاشة 2 (مراجعة المستشفى)", f"{avg_delay_s2:.1f} يوم")
+            dc2.metric("معدل تأخير الشاشة 3 (اعتماد الإمداد)", f"{avg_delay_s3_4:.1f} يوم")
+            dc3.metric("معدل تأخير الشاشة 4 (لجنة الطوارئ)", f"{avg_delay_s3_4:.1f} يوم")
             
             st.markdown("---")
             col_d1, col_d2 = st.columns(2)
