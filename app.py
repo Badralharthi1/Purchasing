@@ -133,15 +133,15 @@ def load_data_to_session():
         ws_c = get_worksheet("complaints")
         recs_c = ws_c.get_all_records()
         if not recs_c:
-            ws_c.update([["id", "username", "hospital", "type", "content", "created_at", "status"]])
-            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status"])
+            ws_c.update([["id", "username", "hospital", "type", "content", "created_at", "status", "admin_reply"]])
+            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status", "admin_reply"])
         else:
             df_c = pd.DataFrame(recs_c)
             df_c.columns = [str(c).strip() for c in df_c.columns]
             st.session_state.db_complaints = df_c
     except Exception:
         if 'db_complaints' not in st.session_state:
-            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status"])
+            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status", "admin_reply"])
 
 if 'db_purchases' not in st.session_state:
     load_data_to_session()
@@ -433,7 +433,7 @@ else:
                         "id": new_id, "requester": st.session_state.username, "hospital": st.session_state.user_hospital,
                         "item_number": item_number_input.strip(), "nupco_number": nupco_number_input.strip(), "e_market_code": e_market_code.strip(),
                         "item_name": item_name_input.strip(), "unit_price": unit_price, "quantity": quantity, "total_cost": unit_price * quantity,
-                        "importance_criteria": importance_criteria, "reason": reason, "status": "قيد المراجعة",
+                        "importance_criteria": importance_criteria, "reason": reason, "status": "التخطيط بالمستشفى",
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "reviewed_at": "", "approved_at": "",
                         "reviewer_notes": "", "approver_notes": "", "edit_history": ""
                     }
@@ -472,7 +472,7 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            df_review = df_all_p[(df_all_p["status"] == 'قيد المراجعة') & (df_all_p["hospital"] == review_hospital)]
+            df_review = df_all_p[(df_all_p["status"] == 'التخطيط بالمستشفى') & (df_all_p["hospital"] == review_hospital)]
         else:
             df_review = pd.DataFrame()
         
@@ -568,12 +568,12 @@ else:
                             new_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         review_notes = st.text_input("ملاحظات المراجعة")
-                        action = st.selectbox("قرار المراجعة", ["تحويل للاعتماد", "رفض الطلب"])
+                        action = st.selectbox("قرار المراجعة", ["تحويل للإمداد", "رفض الطلب"])
                         
                         if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
                             new_total = new_unit_price * new_quantity
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            new_status = "بانتظار الاعتماد" if action == "تحويل للاعتماد" else "مرفوض في المراجعة"
+                            new_status = "التخطيط بالإمداد" if action == "تحويل للإمداد" else "مرفوض من التخطيط بالمستشفى"
                             
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
@@ -606,7 +606,7 @@ else:
         st.header(f"✅ الشاشة الثالثة: إدارة التخطيط بالإمداد ({selected_app_filter})")
         df_all_p = st.session_state.db_purchases
         
-        df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
+        df_all_approved = df_all_p[df_all_p["status"] == 'معتمد'] if not df_all_p.empty else pd.DataFrame()
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
@@ -618,7 +618,7 @@ else:
             st.markdown("---")
 
         if not df_all_p.empty:
-            df_approve = df_all_p[df_all_p["status"] == 'بانتظار الاعتماد']
+            df_approve = df_all_p[df_all_p["status"] == 'التخطيط بالإمداد']
             if selected_app_filter != "جميع المستشفيات":
                 df_approve = df_approve[df_approve["hospital"] == selected_app_filter]
         else:
@@ -682,12 +682,18 @@ else:
                             app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         approver_notes = st.text_input("ملاحظات المعتمد")
-                        app_action = st.selectbox("قرار الاعتماد", ["اعتماد الطلب نهائياً", "رفض الطلب نهائياً"])
+                        app_action = st.selectbox("قرار الاعتماد", ["اعتماد وتحويل للجنة الشراء الطارئ (إن كان حرجاً)", "اعتماد نهائي مباشرة", "رفض الطلب"])
                         
                         if st.form_submit_button("حفظ التعديلات وتنفيذ القرار النهائي"):
                             app_total = app_unit_price * app_quantity
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            final_status = "معتمد نهائياً" if app_action == "اعتماد الطلب نهائياً" else "مرفوض نهائياً"
+                            
+                            if app_action == "اعتماد وتحويل للجنة الشراء الطارئ (إن كان حرجاً)":
+                                final_status = "لجنة الشراء الطارئ" if app_importance == "عالي جداً (حرج)" else "معتمد"
+                            elif app_action == "اعتماد نهائي مباشرة":
+                                final_status = "معتمد"
+                            else:
+                                final_status = "مرفوض من التخطيط بالإمداد"
                             
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
@@ -707,10 +713,10 @@ else:
                                     ws_p.update_cell(idx, 18, str(approver_notes))
                                     break
                             load_data_to_session()
-                            st.success("تم تحديث الطلب واعتماد القرار النهائي بنجاح!")
+                            st.success("تم تحديث الطلب واعتماد القرار بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({selected_app_filter}).")
+            st.info(f"لا توجد طلبات بانتظار الاعتماد في ({selected_app_filter}).")
 
     # ==================== الشاشة الرابعة (اعتماد لجنة الشراء الطارئ) ====================
     elif selected_screen == "الشاشة 4: اعتماد لجنة الشراء الطارئ":
@@ -721,7 +727,7 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'معتمد نهائياً')]
+            df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
         else:
@@ -795,12 +801,12 @@ else:
                             emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
                         
                         emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
-                        emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد طوارئ نهائياً", "رفض طلب الطوارئ"], key="emg_ac")
+                        emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد النهائي", "رفض الطلب"], key="emg_ac")
                         
                         if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
                             emg_total = emg_unit_price * emg_quantity
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            emg_final_status = "معتمد طوارئ نهائياً" if emg_action == "اعتماد طوارئ نهائياً" else "مرفوض في الطوارئ"
+                            emg_final_status = "معتمد" if emg_action == "اعتماد النهائي" else "مرفوض من لجنة الشراء الطارئ"
                             
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
@@ -820,10 +826,10 @@ else:
                                     ws_p.update_cell(idx, 18, str(emg_notes))
                                     break
                             load_data_to_session()
-                            st.success("✅ تم اعتماد وتحديث طلب الشراء الطارئ بنجاح!")
+                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات طارئة معتمدة نهائياً بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
+            st.info(f"لا توجد طلبات طارئة بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
 
     # ==================== الشاشة الخامسة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 5: إدارة الصلاحيات":
@@ -930,51 +936,52 @@ else:
         if not df_all.empty:
             total_orders = len(df_all)
             total_budget = df_all['total_cost'].sum() if 'total_cost' in df_all.columns else 0.0
-            pending_review = len(df_all[df_all['status'] == 'قيد المراجعة'])
-            pending_approve = len(df_all[df_all['status'] == 'بانتظار الاعتماد'])
-            approved_count = len(df_all[df_all['status'].str.contains('معتمد', na=False)])
+            pending_review = len(df_all[df_all['status'] == 'التخطيط بالمستشفى'])
+            pending_approve = len(df_all[df_all['status'] == 'التخطيط بالإمداد'])
+            pending_emg = len(df_all[df_all['status'] == 'لجنة الشراء الطارئ'])
+            approved_count = len(df_all[df_all['status'] == 'معتمد'])
             rejected_count = len(df_all[df_all['status'].str.contains('مرفوض', na=False)])
             
-            df_emg_approved = df_all[(df_all['importance_criteria'] == 'عالي جداً (حرج)') & (df_all['status'] == 'معتمد طوارئ نهائياً')]
+            df_emg_approved = df_all[(df_all['importance_criteria'] == 'عالي جداً (حرج)') & (df_all['status'] == 'معتمد')]
             emg_count = len(df_emg_approved)
             emg_budget = df_emg_approved['total_cost'].sum() if 'total_cost' in df_emg_approved.columns else 0.0
 
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("إجمالي الطلبات", total_orders)
             c2.metric("إجمالي التكاليف", f"{total_budget:,.2f} ر.س")
-            c3.metric("الطلبات المعلقة", pending_review + pending_approve)
+            c3.metric("الطلبات المعلقة", pending_review + pending_approve + pending_emg)
             c4.metric("إجمالي المعتمدة", approved_count)
             
             st.markdown("---")
             rc1, rc2, rc3, rc4, rc5 = st.columns(5)
-            rc1.metric("🔍 قيد المراجعة", pending_review)
-            rc2.metric("⏳ بانتظار الاعتماد", pending_approve)
-            rc3.metric("🚫 الطلبات المرفوضة", rejected_count)
-            rc4.metric("🚨 طلبات الطوارئ المعتمدة", emg_count)
-            rc5.metric("💰 تكلفة طوارئ المعتمدة", f"{emg_budget:,.2f} ر.س")
+            rc1.metric("🔍 التخطيط بالمستشفى", pending_review)
+            rc2.metric("⏳ التخطيط بالإمداد", pending_approve)
+            rc3.metric("🚨 لجنة الشراء الطارئ", pending_emg)
+            rc4.metric("🚫 الطلبات المرفوضة", rejected_count)
+            rc5.metric("✅ المعتمدة نهائياً", approved_count)
             
             st.markdown("---")
             st.subheader("⏱️ مؤشرات معدل التأخير في اعتماد الطلبات لكل شاشة")
             
-            df_screen2_pending = df_all[df_all['status'] == 'قيد المراجعة']
+            df_screen2_pending = df_all[df_all['status'] == 'التخطيط بالمستشفى']
             avg_delay_s2 = 0.0
             if not df_screen2_pending.empty:
                 dates_s2 = pd.to_datetime(df_screen2_pending['created_at'], errors='coerce')
                 delays_s2 = (datetime.now() - dates_s2).dt.total_seconds() / 86400
                 avg_delay_s2 = delays_s2.mean() if not delays_s2.empty else 0.0
 
-            df_screen3_pending = df_all[df_all['status'] == 'بانتظار الاعتماد']
-            avg_delay_s3_4 = 0.0
+            df_screen3_pending = df_all[df_all['status'] == 'التخطيط بالإمداد']
+            avg_delay_s3 = 0.0
             if not df_screen3_pending.empty:
                 ref_dates = df_screen3_pending['reviewed_at'].apply(lambda x: x if str(x).strip() != "" else None).fillna(df_screen3_pending['created_at'])
                 dates_s3 = pd.to_datetime(ref_dates, errors='coerce')
                 delays_s3 = (datetime.now() - dates_s3).dt.total_seconds() / 86400
-                avg_delay_s3_4 = delays_s3.mean() if not delays_s3.empty else 0.0
+                avg_delay_s3 = delays_s3.mean() if not delays_s3.empty else 0.0
 
             dc1, dc2, dc3 = st.columns(3)
             dc1.metric("معدل تأخير الشاشة 2 (مراجعة المستشفى)", f"{avg_delay_s2:.1f} يوم")
-            dc2.metric("معدل تأخير الشاشة 3 (اعتماد الإمداد)", f"{avg_delay_s3_4:.1f} يوم")
-            dc3.metric("معدل تأخير الشاشة 4 (لجنة الطوارئ)", f"{avg_delay_s3_4:.1f} يوم")
+            dc2.metric("معدل تأخير الشاشة 3 (اعتماد الإمداد)", f"{avg_delay_s3:.1f} يوم")
+            dc3.metric("طوارئ معتمدة تكلفة إجمالية", f"{emg_budget:,.2f} ر.س")
             
             st.markdown("---")
             col_d1, col_d2 = st.columns(2)
@@ -995,8 +1002,8 @@ else:
                 st.info("لا توجد طلبات طارئة معتمدة نهائياً حتى الآن.")
 
             st.markdown("---")
-            st.subheader("📋 تفاصيل الطلبات المعتمدة نهائياً")
-            df_app_dash = df_all[df_all['status'].str.contains('معتمد', na=False)]
+            st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
+            df_app_dash = df_all[df_all['status'] == 'معتمد']
             if not df_app_dash.empty:
                 st.dataframe(df_app_dash, use_container_width=True)
             else:
@@ -1015,15 +1022,23 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            c1, c2, c3 = st.columns(3)
+            # تقييد الصلاحية حسب مستشفى المستخدم ما لم يكن أدمن
+            if "مدير النظام (Admin)" in st.session_state.user_roles:
+                hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
+            else:
+                hosp_filter = st.session_state.user_hospital
+                st.info(f"📌 يتم البحث حالياً في طلبات مستشفى: **{st.session_state.user_hospital}**")
+
+            c1, c2 = st.columns(2)
             with c1:
                 search_text = st.text_input("بحث برقم البند، نوبكو، أو اسم الصنف:")
             with c2:
                 status_filter = st.selectbox("تصفية حسب الحالة:", ["الكل"] + df_all_p['status'].dropna().unique().tolist())
-            with c3:
-                hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
 
             filtered_df = df_all_p.copy()
+            if hosp_filter != "الكل":
+                filtered_df = filtered_df[filtered_df['hospital'] == hosp_filter]
+                
             if search_text.strip():
                 st_q = search_text.strip().lower()
                 filtered_df = filtered_df[
@@ -1034,8 +1049,6 @@ else:
                 ]
             if status_filter != "الكل":
                 filtered_df = filtered_df[filtered_df['status'] == status_filter]
-            if hosp_filter != "الكل":
-                filtered_df = filtered_df[filtered_df['hospital'] == hosp_filter]
 
             st.markdown(f"**عدد النتائج المطابقة:** `{len(filtered_df)}` طلب")
             
@@ -1068,7 +1081,7 @@ else:
         tab_send, tab_view = st.tabs(["إرسال شكوى أو اقتراح جديد", "استعراض ومتابعة الشكاوى والاقتراحات"])
         
         with tab_send:
-            with st.form("complaint_form"):
+            with st.form("complaint_form", clear_on_submit=True):
                 comp_type = st.selectbox("نوع المشاركة:", ["اقتراح", "شكوى", "استفسار"])
                 comp_content = st.text_area("تفاصيل الشكوى أو الاقتراح *")
                 
@@ -1086,7 +1099,8 @@ else:
                             "type": comp_type,
                             "content": comp_content.strip(),
                             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                            "status": "قيد المتابعة"
+                            "status": "قيد المتابعة",
+                            "admin_reply": ""
                         }
                         
                         ws_c = get_worksheet("complaints")
@@ -1100,14 +1114,40 @@ else:
             df_c_all = st.session_state.db_complaints
             
             if not df_c_all.empty:
+                display_df = df_c_all.copy()
                 if "مدير النظام (Admin)" not in st.session_state.user_roles:
-                    df_c_all = df_c_all[df_c_all["username"] == st.session_state.username]
+                    display_df = display_df[display_df["username"] == st.session_state.username]
                 
-                # التصحيح هنا: إغلاق القوس المعقوف بشكل صحيح تماماً
-                view_c_df = df_c_all.rename(columns={
+                view_c_df = display_df.rename(columns={
                     "id": "الرقم", "username": "المستخدم", "hospital": "المستشفى",
-                    "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال", "status": "الحالة"
+                    "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال",
+                    "status": "الحالة", "admin_reply": "رد الإدارة"
                 })
                 st.dataframe(view_c_df, use_container_width=True)
+                
+                # جزء إضافي لمدير النظام للرد على الشكاوى والاقتراحات
+                if "مدير النظام (Admin)" in st.session_state.user_roles:
+                    st.markdown("---")
+                    st.subheader("✍️ رد مدير النظام (Admin) على الشكاوى والاقتراحات")
+                    c_ids = display_df["id"].tolist()
+                    selected_c_id = st.selectbox("اختر رقم الشكوى/الاقتراح للرد:", c_ids)
+                    
+                    selected_c_row = display_df[display_df["id"] == selected_c_id].iloc[0]
+                    st.write(f"**المستخدم:** {selected_c_row['username']} ({selected_c_row['hospital']})")
+                    st.write(f"**المحتوى:** {selected_c_row['content']}")
+                    
+                    with st.form("admin_reply_form"):
+                        admin_reply_text = st.text_area("أدخل الرد الخاص بالإدارة:", value=str(selected_c_row.get("admin_reply") or ""))
+                        if st.form_submit_button("حفظ الرد وتحديث الحالة إلى 'تم الرد'"):
+                            ws_c = get_worksheet("complaints")
+                            all_c_records = ws_c.get_all_records()
+                            for idx, r in enumerate(all_c_records, start=2):
+                                if str(r.get("id")) == str(selected_c_id):
+                                    ws_c.update_cell(idx, 7, "تم الرد")
+                                    ws_c.update_cell(idx, 8, str(admin_reply_text))
+                                    break
+                            load_data_to_session()
+                            st.success("✅ تم حفظ الرد بنجاح!")
+                            st.rerun()
             else:
                 st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
