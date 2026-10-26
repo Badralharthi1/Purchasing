@@ -770,7 +770,7 @@ else:
             
             styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
             event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
-            sel_rows_emg = event_emg.selection.rows if hasattr(event, "selection") else []
+            sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
                 emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
@@ -1012,8 +1012,4 @@ else:
             else:
                 st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
         else:
-            st.info("لا توجد بيانات مسجلة في النظام بعد.")
-        
-        st.markdown("---")
-        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
-        st.dataframe(users_df, use_container_width=True)
+            st.info("لا
