@@ -622,11 +622,10 @@ else:
 
     # ==================== الشاشة الثالثة (إدارة التخطيط بالإمداد) ====================
     elif selected_screen == "الشاشة 3: إدارة التخطيط بالإمداد":
-        approve_hospital = st.session_state.user_hospital
-        if "مدير النظام (Admin)" in st.session_state.user_roles:
-            approve_hospital = st.selectbox("اختيار مستشفى للإعتماد:", HOSPITALS_LIST, index=HOSPITALS_LIST.index(st.session_state.user_hospital) if st.session_state.user_hospital in HOSPITALS_LIST else 0, key="app_hosp_sb")
+        app_hospital_selection = ["جميع المستشفيات"] + HOSPITALS_LIST
+        selected_app_filter = st.selectbox("اختيار المستشفى للإعتماد:", app_hospital_selection, index=0, key="app_hosp_sb")
 
-        st.header(f"✅ الشاشة الثالثة: إدارة التخطيط بالإمداد ({approve_hospital})")
+        st.header(f"✅ الشاشة الثالثة: إدارة التخطيط بالإمداد ({selected_app_filter})")
         df_all_p = st.session_state.db_purchases
         
         df_all_approved = df_all_p[df_all_p["status"] == 'معتمد نهائياً'] if not df_all_p.empty else pd.DataFrame()
@@ -640,7 +639,12 @@ else:
             )
             st.markdown("---")
 
-        df_approve = df_all_p[(df_all_p["status"] == 'بانتظار الاعتماد') & (df_all_p["hospital"] == approve_hospital)] if not df_all_p.empty else pd.DataFrame()
+        if not df_all_p.empty:
+            df_approve = df_all_p[df_all_p["status"] == 'بانتظار الاعتماد']
+            if selected_app_filter != "جميع المستشفيات":
+                df_approve = df_approve[df_approve["hospital"] == selected_app_filter]
+        else:
+            df_approve = pd.DataFrame()
         
         if not df_approve.empty:
             df_approve_view = df_approve.rename(columns={
@@ -728,7 +732,7 @@ else:
                             st.success("تم تحديث الطلب واعتماد القرار النهائي بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({approve_hospital}).")
+            st.info(f"لا توجد طلبات بانتظار الاعتماد النهائي في ({selected_app_filter}).")
 
     # ==================== الشاشة الرابعة (اعتماد لجنة الشراء الطارئ) ====================
     elif selected_screen == "الشاشة 4: اعتماد لجنة الشراء الطارئ":
@@ -766,7 +770,7 @@ else:
             
             styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
             event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
-            sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
+            sel_rows_emg = event_emg.selection.rows if hasattr(event, "selection") else []
             
             if sel_rows_emg:
                 emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
