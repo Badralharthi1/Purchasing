@@ -519,7 +519,7 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة بمرونة (رقم البند أو رقم نوبكو أو اسم الصنف) ---
+                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) بكافة حالاتها ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
                     sel_name = str(co["item_name"]).strip()
@@ -538,7 +538,7 @@ else:
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -627,7 +627,7 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة بمرونة ---
+                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
                     sel_name = str(co["item_name"]).strip()
@@ -646,7 +646,7 @@ else:
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -738,7 +738,7 @@ else:
                 if not current_emg_row.empty:
                     co_emg = current_emg_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة بمرونة ---
+                    # --- عرض الطلبات المشابهة (معتمدة، مرفوضة، منتظرة الإجراء) ---
                     sel_item_num = str(co_emg["item_number"]).strip()
                     sel_nupco = str(co_emg["nupco_number"]).strip()
                     sel_name = str(co_emg["item_name"]).strip()
@@ -757,7 +757,7 @@ else:
 
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
+                        st.info(f"📌 **سجل الطلبات المشابهة السابقة (المعتمدة، المرفوضة، والمنتظرة) للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
 
