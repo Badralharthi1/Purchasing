@@ -692,7 +692,8 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id"] == app_req_id:
+                                # التصحيح هنا: إغلاق الأقواس بشكل سليم تماماً
+                                if row.get("id") == app_req_id:
                                     ws_p.update_cell(idx, 4, str(app_item_number))
                                     ws_p.update_cell(idx, 5, str(app_nupco_number))
                                     ws_p.update_cell(idx, 6, str(app_e_market_code))
@@ -805,7 +806,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id"] == emg_req_id:
+                                if row.get("id") == emg_req_id:
                                     ws_p.update_cell(idx, 4, str(emg_item_number))
                                     ws_p.update_cell(idx, 5, str(emg_nupco_number))
                                     ws_p.update_cell(idx, 6, str(emg_e_market_code))
@@ -1106,7 +1107,3 @@ else:
                 view_c_df = df_c_all.rename(columns={
                     "id": "الرقم", "username": "المستخدم", "hospital": "المستشفى",
                     "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال", "status": "الحالة"
-                })
-                st.dataframe(view_c_df, use_container_width=True)
-            else:
-                st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
