@@ -692,7 +692,6 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                # التصحيح هنا: إغلاق الأقواس بشكل سليم تماماً
                                 if row.get("id") == app_req_id:
                                     ws_p.update_cell(idx, 4, str(app_item_number))
                                     ws_p.update_cell(idx, 5, str(app_nupco_number))
@@ -1104,6 +1103,11 @@ else:
                 if "مدير النظام (Admin)" not in st.session_state.user_roles:
                     df_c_all = df_c_all[df_c_all["username"] == st.session_state.username]
                 
+                # التصحيح هنا: إغلاق القوس المعقوف بشكل صحيح تماماً
                 view_c_df = df_c_all.rename(columns={
                     "id": "الرقم", "username": "المستخدم", "hospital": "المستشفى",
                     "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال", "status": "الحالة"
+                })
+                st.dataframe(view_c_df, use_container_width=True)
+            else:
+                st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
