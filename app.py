@@ -1012,4 +1012,8 @@ else:
             else:
                 st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
         else:
-            st.info("لا
+            st.info("لا توجد بيانات مسجلة في النظام بعد.")
+        
+        st.markdown("---")
+        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
+        st.dataframe(users_df, use_container_width=True)
