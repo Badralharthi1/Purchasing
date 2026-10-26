@@ -519,14 +519,26 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة السابقة ---
+                    # --- عرض الطلبات المشابهة بمرونة (رقم البند أو رقم نوبكو أو اسم الصنف) ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
-                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != req_id)] if not df_all_p.empty else pd.DataFrame()
+                    sel_name = str(co["item_name"]).strip()
+                    
+                    if not df_all_p.empty:
+                        similar_orders = df_all_p[
+                            (
+                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                            ) & 
+                            (df_all_p["id"] != req_id)
+                        ]
+                    else:
+                        similar_orders = pd.DataFrame()
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -615,14 +627,26 @@ else:
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة السابقة ---
+                    # --- عرض الطلبات المشابهة بمرونة ---
                     sel_item_num = str(co["item_number"]).strip()
                     sel_nupco = str(co["nupco_number"]).strip()
-                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != app_req_id)] if not df_all_p.empty else pd.DataFrame()
+                    sel_name = str(co["item_name"]).strip()
+                    
+                    if not df_all_p.empty:
+                        similar_orders = df_all_p[
+                            (
+                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                            ) & 
+                            (df_all_p["id"] != app_req_id)
+                        ]
+                    else:
+                        similar_orders = pd.DataFrame()
                     
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
                     
@@ -714,16 +738,26 @@ else:
                 if not current_emg_row.empty:
                     co_emg = current_emg_row.iloc[0]
                     
-                    # --- عرض الطلبات المشابهة السابقة ---
+                    # --- عرض الطلبات المشابهة بمرونة ---
                     sel_item_num = str(co_emg["item_number"]).strip()
                     sel_nupco = str(co_emg["nupco_number"]).strip()
-                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] == emg_req_id)] if not df_all_p.empty else pd.DataFrame()
-                    # تم تصحيح الفلتر أدناه ليشمل كل المشابهة ما عدا الطلب الحالي
-                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != emg_req_id)] if not df_all_p.empty else pd.DataFrame()
+                    sel_name = str(co_emg["item_name"]).strip()
+                    
+                    if not df_all_p.empty:
+                        similar_orders = df_all_p[
+                            (
+                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                            ) & 
+                            (df_all_p["id"] != emg_req_id)
+                        ]
+                    else:
+                        similar_orders = pd.DataFrame()
 
                     if not similar_orders.empty:
                         st.markdown("---")
-                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف الحالي في النظام:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
 
