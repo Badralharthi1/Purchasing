@@ -371,7 +371,7 @@ else:
                 catalog_df['رقم البند'].str.lower().str.contains(q, na=False) |
                 catalog_df['رقم نوبكو'].str.lower().str.contains(q, na=False) |
                 catalog_df['اسم الصنف'].str.lower().str.contains(q, na=False)
-            ].head(15) # عرض أول 15 نتيجة مطابقة لتجنب أي ثقل
+            ].head(15)
             
             if not filtered_cat.empty:
                 options_list = [f"{r['رقم البند']} | {r['رقم نوبكو']} | {r['اسم الصنف']}" for _, r in filtered_cat.iterrows()]
@@ -705,7 +705,8 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد')]
+            # التعديل هنا: شرط ظهور طلبات الطوارئ يتطلب أن يكون الصنف حرجاً، وتجاوز الاعتماد في الشاشة الثالثة وأصبح "معتمد نهائياً"
+            df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'معتمد نهائياً')]
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
         else:
@@ -807,7 +808,7 @@ else:
                             st.success("✅ تم اعتماد وتحديث طلب الشراء الطارئ بنجاح!")
                             st.rerun()
         else:
-            st.info(f"لا توجد طلبات طارئة حرجة بانتظار الاعتماد في ({selected_emg_filter}).")
+            st.info(f"لا توجد طلبات طارئة معتمدة نهائياً بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
 
     # ==================== الشاشة الخامسة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 5: إدارة الصلاحيات":
