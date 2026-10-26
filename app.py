@@ -81,7 +81,7 @@ def load_data_to_session():
         recs = ws_users.get_all_records()
         if not recs:
             admin_pw = make_hashes("admin123")
-            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد,اعتماد لجنة الشراء الطارئ"
+            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد,اعتماد لجنة الشراء الطارئ,البحث الشامل,الشكاوى والاقتراحات"
             ws_users.update([
                 ["username", "password", "roles", "status", "hospital"],
                 ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
@@ -129,6 +129,20 @@ def load_data_to_session():
         if 'db_purchases' not in st.session_state:
             st.session_state.db_purchases = pd.DataFrame()
 
+    try:
+        ws_c = get_worksheet("complaints")
+        recs_c = ws_c.get_all_records()
+        if not recs_c:
+            ws_c.update([["id", "username", "hospital", "type", "content", "created_at", "status"]])
+            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status"])
+        else:
+            df_c = pd.DataFrame(recs_c)
+            df_c.columns = [str(c).strip() for c in df_c.columns]
+            st.session_state.db_complaints = df_c
+    except Exception:
+        if 'db_complaints' not in st.session_state:
+            st.session_state.db_complaints = pd.DataFrame(columns=["id", "username", "hospital", "type", "content", "created_at", "status"])
+
 if 'db_purchases' not in st.session_state:
     load_data_to_session()
 
@@ -174,9 +188,9 @@ def highlight_delay_standard(row):
             return [''] * len(row)
         days_diff = (datetime.now() - created).days
         if days_diff >= 3:
-            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row) # أحمر
+            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
         elif days_diff == 1:
-            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) # أصفر
+            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
     except Exception:
         pass
     return [''] * len(row)
@@ -188,9 +202,9 @@ def highlight_delay_screen4(row):
             return [''] * len(row)
         days_diff = (datetime.now() - created).days
         if days_diff > 10:
-            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row) # أحمر (أكثر من 10 أيام)
+            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
         elif 7 <= days_diff <= 10:
-            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) # أصفر (من 7-10 أيام)
+            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
     except Exception:
         pass
     return [''] * len(row)
@@ -241,7 +255,7 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
-            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد"]
+            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles, default=[])
             
             if st.form_submit_button("إرسال طلب التسجيل"):
@@ -346,6 +360,10 @@ else:
         screens.append("الشاشة 5: إدارة الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 6: لوحة التحكّم التفصيلية (Dashboard)")
+    if "البحث الشامل" in roles or "مدير النظام (Admin)" in roles:
+        screens.append("الشاشة 7: البحث الشامل في كافة الطلبات")
+    if "الشكاوى والاقتراحات" in roles or "مدير النظام (Admin)" in roles:
+        screens.append("الشاشة 8: الشكاوى والاقتراحات")
 
     if not screens:
         st.warning("⚠️ لا توجد صلاحيات مفعلة حالياً.")
@@ -674,7 +692,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == app_req_id:
+                                if row.get("id"] == app_req_id:
                                     ws_p.update_cell(idx, 4, str(app_item_number))
                                     ws_p.update_cell(idx, 5, str(app_nupco_number))
                                     ws_p.update_cell(idx, 6, str(app_e_market_code))
@@ -730,7 +748,7 @@ else:
             
             styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
             event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
-            sel_rows_emg = event_emg.selection.rows if hasattr(event, "selection") else []
+            sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
                 emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
@@ -787,7 +805,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == emg_req_id:
+                                if row.get("id"] == emg_req_id:
                                     ws_p.update_cell(idx, 4, str(emg_item_number))
                                     ws_p.update_cell(idx, 5, str(emg_nupco_number))
                                     ws_p.update_cell(idx, 6, str(emg_e_market_code))
@@ -859,7 +877,7 @@ else:
                     
                     with st.form("direct_user_edit_form"):
                         updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
-                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
                         updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
                         status_options = ["معتمد", "قيد الانتظار", "قيد إعادة تعيين كلمة المرور", "موقوف"]
                         updated_status = st.selectbox("حالة الحساب (اختر معتمد للموافقة)", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
@@ -881,7 +899,7 @@ else:
                     new_u_name = st.text_input("اسم المستخدم الجديد")
                     new_u_pass = st.text_input("كلمة المرور", type="password")
                     new_u_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
-                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "مدير النظام (Admin)"]
+                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
                     new_u_roles = st.multiselect("الصلاحيات", all_roles_options, default=["رفع طلبات"])
                     
                     if st.form_submit_button("إضافة المستخدم"):
@@ -917,7 +935,6 @@ else:
             approved_count = len(df_all[df_all['status'].str.contains('معتمد', na=False)])
             rejected_count = len(df_all[df_all['status'].str.contains('مرفوض', na=False)])
             
-            # فلترة طلبات لجنة الشراء الطارئ المعتمدة
             df_emg_approved = df_all[(df_all['importance_criteria'] == 'عالي جداً (حرج)') & (df_all['status'] == 'معتمد طوارئ نهائياً')]
             emg_count = len(df_emg_approved)
             emg_budget = df_emg_approved['total_cost'].sum() if 'total_cost' in df_emg_approved.columns else 0.0
@@ -936,7 +953,6 @@ else:
             rc4.metric("🚨 طلبات الطوارئ المعتمدة", emg_count)
             rc5.metric("💰 تكلفة طوارئ المعتمدة", f"{emg_budget:,.2f} ر.س")
             
-            # --- حساب معدل التأخير لكل شاشة (بالأيام) ---
             st.markdown("---")
             st.subheader("⏱️ مؤشرات معدل التأخير في اعتماد الطلبات لكل شاشة")
             
@@ -991,3 +1007,106 @@ else:
         st.markdown("---")
         st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
         st.dataframe(users_df, use_container_width=True)
+
+    # ==================== الشاشة السابعة (البحث الشامل في كافة الطلبات) ====================
+    elif selected_screen == "الشاشة 7: البحث الشامل في كافة الطلبات":
+        st.header("🔎 الشاشة السابعة: البحث الشامل في كافة الطلبات والإجراءات المتخذة")
+        
+        df_all_p = st.session_state.db_purchases
+        
+        if not df_all_p.empty:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                search_text = st.text_input("بحث برقم البند، نوبكو، أو اسم الصنف:")
+            with c2:
+                status_filter = st.selectbox("تصفية حسب الحالة:", ["الكل"] + df_all_p['status'].dropna().unique().tolist())
+            with c3:
+                hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
+
+            filtered_df = df_all_p.copy()
+            if search_text.strip():
+                st_q = search_text.strip().lower()
+                filtered_df = filtered_df[
+                    filtered_df['item_number'].astype(str).str.lower().str.contains(st_q, na=False) |
+                    filtered_df['nupco_number'].astype(str).str.lower().str.contains(st_q, na=False) |
+                    filtered_df['item_name'].astype(str).str.lower().str.contains(st_q, na=False) |
+                    filtered_df['id'].astype(str).str.lower().str.contains(st_q, na=False)
+                ]
+            if status_filter != "الكل":
+                filtered_df = filtered_df[filtered_df['status'] == status_filter]
+            if hosp_filter != "الكل":
+                filtered_df = filtered_df[filtered_df['hospital'] == hosp_filter]
+
+            st.markdown(f"**عدد النتائج المطابقة:** `{len(filtered_df)}` طلب")
+            
+            excel_bytes_search = to_excel_bytes(filtered_df)
+            st.download_button(
+                label="📥 تصدير نتيجة البحث إلى ملف Excel (.xls)",
+                data=excel_bytes_search,
+                file_name=f"search_results_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                mime="application/vnd.ms-excel"
+            )
+            st.markdown("---")
+
+            view_search_df = filtered_df.rename(columns={
+                "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
+                "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق", "item_name": "اسم الصنف",
+                "unit_price": "السعر الأفرادي", "quantity": "الكمية", "total_cost": "الإجمالي",
+                "importance_criteria": "الأهمية", "reason": "السبب", "status": "الحالة",
+                "created_at": "تاريخ الإنشاء", "reviewed_at": "تاريخ المراجعة", "approved_at": "تاريخ الاعتماد",
+                "reviewer_notes": "ملاحظات المراجعة", "approver_notes": "ملاحظات الاعتماد"
+            })
+            
+            st.dataframe(view_search_df, use_container_width=True)
+        else:
+            st.info("لا توجد طلبات مسجلة في النظام للبحث عنها.")
+
+    # ==================== الشاشة الثامنة (الشكاوى والاقتراحات) ====================
+    elif selected_screen == "الشاشة 8: الشكاوى والاقتراحات":
+        st.header("💬 الشاشة الثامنة: نظام الشكاوى والاقتراحات")
+        
+        tab_send, tab_view = st.tabs(["إرسال شكوى أو اقتراح جديد", "استعراض ومتابعة الشكاوى والاقتراحات"])
+        
+        with tab_send:
+            with st.form("complaint_form"):
+                comp_type = st.selectbox("نوع المشاركة:", ["اقتراح", "شكوى", "استفسار"])
+                comp_content = st.text_area("تفاصيل الشكوى أو الاقتراح *")
+                
+                if st.form_submit_button("إرسال"):
+                    if not comp_content.strip():
+                        st.error("الرجاء كتابة محتوى الشكوى أو الاقتراح.")
+                    else:
+                        df_c = st.session_state.db_complaints
+                        new_c_id = int(df_c["id"].max()) + 1 if not df_c.empty and not pd.isna(df_c["id"].max()) else 1
+                        
+                        new_c_row = {
+                            "id": new_c_id,
+                            "username": st.session_state.username,
+                            "hospital": st.session_state.user_hospital,
+                            "type": comp_type,
+                            "content": comp_content.strip(),
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "status": "قيد المتابعة"
+                        }
+                        
+                        ws_c = get_worksheet("complaints")
+                        ws_c.append_row(list(new_c_row.values()))
+                        load_data_to_session()
+                        st.success("✅ تم إرسال مشاركتك بنجاح وشكراً لتواصلك!")
+                        st.rerun()
+
+        with tab_view:
+            st.subheader("📋 سجل الشكاوى والاقتراحات المسجلة")
+            df_c_all = st.session_state.db_complaints
+            
+            if not df_c_all.empty:
+                if "مدير النظام (Admin)" not in st.session_state.user_roles:
+                    df_c_all = df_c_all[df_c_all["username"] == st.session_state.username]
+                
+                view_c_df = df_c_all.rename(columns={
+                    "id": "الرقم", "username": "المستخدم", "hospital": "المستشفى",
+                    "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال", "status": "الحالة"
+                })
+                st.dataframe(view_c_df, use_container_width=True)
+            else:
+                st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
