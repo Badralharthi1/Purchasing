@@ -205,8 +205,8 @@ def sync_name_changed():
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
-# --- دالة تلوين الصفوف بناءً على أيام التأخير ---
-def highlight_delay_rows(row):
+# --- دوال تلوين الصفوف بناءً على أيام التأخير للشاشات ---
+def highlight_delay_standard(row):
     try:
         created = pd.to_datetime(row.get('تاريخ الإنشاء') or row.get('created_at'), errors='coerce')
         if pd.isna(created):
@@ -216,6 +216,20 @@ def highlight_delay_rows(row):
             return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row) # أحمر
         elif days_diff == 1:
             return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) # أصفر
+    except Exception:
+        pass
+    return [''] * len(row)
+
+def highlight_delay_screen4(row):
+    try:
+        created = pd.to_datetime(row.get('تاريخ الإنشاء') or row.get('created_at'), errors='coerce')
+        if pd.isna(created):
+            return [''] * len(row)
+        days_diff = (datetime.now() - created).days
+        if days_diff > 10:
+            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row) # أحمر (أكثر من 10 أيام)
+        elif 7 <= days_diff <= 10:
+            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row) # أصفر (من 7-10 أيام)
     except Exception:
         pass
     return [''] * len(row)
@@ -527,7 +541,7 @@ else:
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
 
-            styled_review_df = target_df_view.style.apply(highlight_delay_rows, axis=1)
+            styled_review_df = target_df_view.style.apply(highlight_delay_standard, axis=1)
             event = st.dataframe(styled_review_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
@@ -637,7 +651,7 @@ else:
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
             st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
-            styled_app_df = df_approve_view.style.apply(highlight_delay_rows, axis=1)
+            styled_app_df = df_approve_view.style.apply(highlight_delay_standard, axis=1)
             event_app = st.dataframe(styled_app_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
@@ -748,9 +762,9 @@ else:
             })
             
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
-            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح التلوين (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر من 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            styled_emg_df = df_emg_view.style.apply(highlight_delay_rows, axis=1)
+            styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
             event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
@@ -955,7 +969,6 @@ else:
             st.markdown("---")
             st.subheader("⏱️ مؤشرات معدل التأخير في اعتماد الطلبات لكل شاشة")
             
-            # الشاشة الثانية (مراجعة المستشفى): نقيس الطلبات التي حالتها 'قيد المراجعة'
             df_screen2_pending = df_all[df_all['status'] == 'قيد المراجعة']
             avg_delay_s2 = 0.0
             if not df_screen2_pending.empty:
@@ -963,11 +976,9 @@ else:
                 delays_s2 = (datetime.now() - dates_s2).dt.total_seconds() / 86400
                 avg_delay_s2 = delays_s2.mean() if not delays_s2.empty else 0.0
 
-            # الشاشة الثالثة والرابعة (الإمداد / الطوارئ): نقيس الطلبات التي حالتها 'بانتظار الاعتماد'
             df_screen3_pending = df_all[df_all['status'] == 'بانتظار الاعتماد']
             avg_delay_s3_4 = 0.0
             if not df_screen3_pending.empty:
-                # نأخذ تاريخ المراجعة إذا توفر، وإلا تاريخ الإنشاء
                 ref_dates = df_screen3_pending['reviewed_at'].apply(lambda x: x if str(x).strip() != "" else None).fillna(df_screen3_pending['created_at'])
                 dates_s3 = pd.to_datetime(ref_dates, errors='coerce')
                 delays_s3 = (datetime.now() - dates_s3).dt.total_seconds() / 86400
