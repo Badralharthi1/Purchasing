@@ -518,6 +518,18 @@ else:
                 current_order_row = df_all_p[df_all_p["id"] == req_id]
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
+                    
+                    # --- عرض الطلبات المشابهة السابقة ---
+                    sel_item_num = str(co["item_number"]).strip()
+                    sel_nupco = str(co["nupco_number"]).strip()
+                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != req_id)] if not df_all_p.empty else pd.DataFrame()
+                    
+                    if not similar_orders.empty:
+                        st.markdown("---")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+                    
                     st.markdown("---")
                     st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
                     with st.form("edit_review_form"):
@@ -602,6 +614,18 @@ else:
                 current_order_row = df_all_p[df_all_p["id"] == app_req_id]
                 if not current_order_row.empty:
                     co = current_order_row.iloc[0]
+                    
+                    # --- عرض الطلبات المشابهة السابقة ---
+                    sel_item_num = str(co["item_number"]).strip()
+                    sel_nupco = str(co["nupco_number"]).strip()
+                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != app_req_id)] if not df_all_p.empty else pd.DataFrame()
+                    
+                    if not similar_orders.empty:
+                        st.markdown("---")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+                    
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار النهائي رقم: {app_req_id}")
                     with st.form("approval_action_form"):
@@ -657,7 +681,6 @@ else:
         st.header(f"🚨 الشاشة الرابعة: اعتماد لجنة الشراء الطارئ ({selected_emg_filter})")
         df_all_p = st.session_state.db_purchases
         
-        # --- تجهيز وتصفية بيانات الشاشة الرابعة الحالية لتصديرها ---
         if not df_all_p.empty:
             df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'بانتظار الاعتماد')]
             if selected_emg_filter != "جميع المستشفيات":
@@ -665,7 +688,6 @@ else:
         else:
             df_emergency = pd.DataFrame()
 
-        # --- زر تصدير قائمة طلبات الطوارئ المعروضة في الشاشة الحالية إلى Excel ---
         if not df_emergency.empty:
             excel_bytes_emg = to_excel_bytes(df_emergency)
             st.download_button(
@@ -691,6 +713,20 @@ else:
                 current_emg_row = df_all_p[df_all_p["id"] == emg_req_id]
                 if not current_emg_row.empty:
                     co_emg = current_emg_row.iloc[0]
+                    
+                    # --- عرض الطلبات المشابهة السابقة ---
+                    sel_item_num = str(co_emg["item_number"]).strip()
+                    sel_nupco = str(co_emg["nupco_number"]).strip()
+                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] == emg_req_id)] if not df_all_p.empty else pd.DataFrame()
+                    # تم تصحيح الفلتر أدناه ليشمل كل المشابهة ما عدا الطلب الحالي
+                    similar_orders = df_all_p[((df_all_p["item_number"] == sel_item_num) | (df_all_p["nupco_number"] == sel_nupco)) & (df_all_p["id"] != emg_req_id)] if not df_all_p.empty else pd.DataFrame()
+
+                    if not similar_orders.empty:
+                        st.markdown("---")
+                        st.info(f"📌 **تنبيه: توجد طلبات سابقة/مشابهة للصنف (رقم البند: {sel_item_num} أو نوبكو: {sel_nupco}):**")
+                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
                     with st.form("emergency_action_form"):
