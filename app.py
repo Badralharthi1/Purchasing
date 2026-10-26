@@ -360,11 +360,9 @@ else:
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
-        # --- خانة البحث السريع الخالية من البطء ---
         st.subheader("🔍 البحث السريع في دليل الأصناف للإدراج الفوري")
         search_query = st.text_input("أدخل جزءاً من (رقم البند، رقم نوبكو، أو اسم الصنف) ثم اضغط بحث:")
         
-        selected_row_data = None
         if search_query.strip() and not catalog_df.empty:
             q = search_query.strip().lower()
             filtered_cat = catalog_df[
@@ -705,7 +703,6 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            # التعديل هنا: شرط ظهور طلبات الطوارئ يتطلب أن يكون الصنف حرجاً، وتجاوز الاعتماد في الشاشة الثالثة وأصبح "معتمد نهائياً"
             df_emergency = df_all_p[(df_all_p["importance_criteria"] == 'عالي جداً (حرج)') & (df_all_p["status"] == 'معتمد نهائياً')]
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
@@ -733,7 +730,7 @@ else:
             
             styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
             event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
-            sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
+            sel_rows_emg = event_emg.selection.rows if hasattr(event, "selection") else []
             
             if sel_rows_emg:
                 emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
@@ -920,6 +917,11 @@ else:
             approved_count = len(df_all[df_all['status'].str.contains('معتمد', na=False)])
             rejected_count = len(df_all[df_all['status'].str.contains('مرفوض', na=False)])
             
+            # فلترة طلبات لجنة الشراء الطارئ المعتمدة
+            df_emg_approved = df_all[(df_all['importance_criteria'] == 'عالي جداً (حرج)') & (df_all['status'] == 'معتمد طوارئ نهائياً')]
+            emg_count = len(df_emg_approved)
+            emg_budget = df_emg_approved['total_cost'].sum() if 'total_cost' in df_emg_approved.columns else 0.0
+
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("إجمالي الطلبات", total_orders)
             c2.metric("إجمالي التكاليف", f"{total_budget:,.2f} ر.س")
@@ -927,10 +929,12 @@ else:
             c4.metric("إجمالي المعتمدة", approved_count)
             
             st.markdown("---")
-            rc1, rc2, rc3 = st.columns(3)
+            rc1, rc2, rc3, rc4, rc5 = st.columns(5)
             rc1.metric("🔍 قيد المراجعة", pending_review)
             rc2.metric("⏳ بانتظار الاعتماد", pending_approve)
             rc3.metric("🚫 الطلبات المرفوضة", rejected_count)
+            rc4.metric("🚨 طلبات الطوارئ المعتمدة", emg_count)
+            rc5.metric("💰 تكلفة طوارئ المعتمدة", f"{emg_budget:,.2f} ر.س")
             
             # --- حساب معدل التأخير لكل شاشة (بالأيام) ---
             st.markdown("---")
@@ -967,6 +971,13 @@ else:
                 if 'status' in df_all.columns:
                     st.bar_chart(df_all['status'].value_counts())
             
+            st.markdown("---")
+            st.subheader("🚨 جدول تفصيلي لطلبات لجنة الشراء الطارئ المعتمدة")
+            if not df_emg_approved.empty:
+                st.dataframe(df_emg_approved, use_container_width=True)
+            else:
+                st.info("لا توجد طلبات طارئة معتمدة نهائياً حتى الآن.")
+
             st.markdown("---")
             st.subheader("📋 تفاصيل الطلبات المعتمدة نهائياً")
             df_app_dash = df_all[df_all['status'].str.contains('معتمد', na=False)]
