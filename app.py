@@ -57,7 +57,7 @@ def make_hashes(password):
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# --- الاتصال السحابي (يتم تحميل البيانات مؤقتاً لتسريع الأداء ولا يتم التحديث إلا بزر الشريط الجانبي) ---
+# --- الاتصال السحابي ---
 @st.cache_resource
 def get_gsheet_client():
     raw_json = st.secrets["gcp_json"]
@@ -360,29 +360,32 @@ else:
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
         st.header(f"🛒 الشاشة الأولى: تقديم طلب شراء جديد ({st.session_state.user_hospital})")
         
-        # --- خانة البحث المخصصة وزر الإدراج لتسريع الأداء ---
-        st.subheader("🔍 البحث في دليل الأصناف للإدراج السريع")
+        # --- خانة البحث السريع الخالية من البطء ---
+        st.subheader("🔍 البحث السريع في دليل الأصناف للإدراج الفوري")
+        search_query = st.text_input("أدخل جزءاً من (رقم البند، رقم نوبكو، أو اسم الصنف) ثم اضغط بحث:")
         
-        catalog_search_options = ["-- اختر للبحث --"]
-        if not catalog_df.empty:
-            # دمج خيارات البحث لتسهيل الوصول (رقم البند - رقم نوبكو - اسم الصنف)
-            catalog_search_options += [
-                f"{row['رقم البند']} | {row['رقم نوبكو']} | {row['اسم الصنف']}" 
-                for _, row in catalog_df.iterrows()
-            ]
-        
-        selected_search_item = st.selectbox("ابحث برقم البند أو رقم نوبكو أو اسم الصنف:", catalog_search_options)
-        
-        if st.button("📥 إدراج البيانات في النموذج"):
-            if selected_search_item != "-- اختر للبحث --":
-                parts = [p.strip() for p in selected_search_item.split("|")]
-                if len(parts) >= 3:
-                    st.session_state.form_item_number = parts[0]
-                    st.session_state.form_nupco_number = parts[1]
-                    st.session_state.form_item_name = parts[2]
-                    st.success("✅ تم إدراج بيانات الصنف بنجاح في النموذج أدناه!")
+        selected_row_data = None
+        if search_query.strip() and not catalog_df.empty:
+            q = search_query.strip().lower()
+            filtered_cat = catalog_df[
+                catalog_df['رقم البند'].str.lower().str.contains(q, na=False) |
+                catalog_df['رقم نوبكو'].str.lower().str.contains(q, na=False) |
+                catalog_df['اسم الصنف'].str.lower().str.contains(q, na=False)
+            ].head(15) # عرض أول 15 نتيجة مطابقة لتجنب أي ثقل
+            
+            if not filtered_cat.empty:
+                options_list = [f"{r['رقم البند']} | {r['رقم نوبكو']} | {r['اسم الصنف']}" for _, r in filtered_cat.iterrows()]
+                chosen_option = st.selectbox("اختر الصنف المطابق من النتائج:", options_list)
+                
+                if st.button("📥 إدراج البيانات في النموذج"):
+                    parts = [p.strip() for p in chosen_option.split("|")]
+                    if len(parts) >= 3:
+                        st.session_state.form_item_number = parts[0]
+                        st.session_state.form_nupco_number = parts[1]
+                        st.session_state.form_item_name = parts[2]
+                        st.success("✅ تم إدراج بيانات الصنف بنجاح في النموذج أدناه!")
             else:
-                st.warning("الرجاء اختيار صنف من القائمة أولاً.")
+                st.info("لا توجد نتائج مطابقة لبحثك في الدليل.")
 
         st.markdown("---")
         
