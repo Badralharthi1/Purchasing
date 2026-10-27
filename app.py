@@ -117,7 +117,7 @@ def load_data_to_session():
             df_p = pd.DataFrame(recs_p)
             df_p.columns = [str(c).strip() for c in df_p.columns]
             if "id" in df_p.columns:
-                df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce")
+                df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce").fillna(0).astype(int)
             if "unit_price" in df_p.columns:
                 df_p["unit_price"] = pd.to_numeric(df_p["unit_price"], errors="coerce").fillna(0.0)
             if "quantity" in df_p.columns:
@@ -138,6 +138,8 @@ def load_data_to_session():
         else:
             df_c = pd.DataFrame(recs_c)
             df_c.columns = [str(c).strip() for c in df_c.columns]
+            if "id" in df_c.columns:
+                df_c["id"] = pd.to_numeric(df_c["id"], errors="coerce").fillna(0).astype(int)
             st.session_state.db_complaints = df_c
     except Exception:
         if 'db_complaints' not in st.session_state:
@@ -179,6 +181,16 @@ if 'form_item_name' not in st.session_state:
 
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
+
+def safe_display_df(df):
+    """دالة لضمان تحويل جميع الأعمدة لنصوص صالحة للعرض لمنع أخطاء pyarrow"""
+    if df.empty:
+        return df
+    safe_df = df.copy()
+    for col in safe_df.columns:
+        if col not in ["رقم الطلب", "السعر الأفرادي", "الكمية", "الإجمالي", "الرقم"]:
+            safe_df[col] = safe_df[col].astype(str).replace('nan', '')
+    return safe_df
 
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
@@ -431,7 +443,7 @@ else:
                 "total_cost": "الإجمالي", "importance_criteria": "الأهمية", "reason": "السبب",
                 "status": "الحالة", "created_at": "تاريخ الإنشاء"
             })
-        st.dataframe(df_my_orders, use_container_width=True)
+        st.dataframe(safe_display_df(df_my_orders), use_container_width=True)
 
     # ==================== الشاشة الثانية (إدارة التخطيط بالمستشفى) ====================
     elif selected_screen == "الشاشة 2: إدارة التخطيط بالمستشفى":
@@ -456,7 +468,6 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
-            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
@@ -477,21 +488,20 @@ else:
                         primary_id = ids[0]
                         
                         for idx, row in enumerate(all_rows, start=2):
-                            if row.get("id") == primary_id:
+                            if int(row.get("id", 0)) == int(primary_id):
                                 ws_p.update_cell(idx, 9, int(total_qty))
                                 ws_p.update_cell(idx, 10, float(total_cost_merged))
                                 break
                         for remove_id in ids[1:]:
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == remove_id:
+                                if int(row.get("id", 0)) == int(remove_id):
                                     ws_p.delete_rows(idx)
                                     break
                         load_data_to_session()
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
 
-            # تم استخدام الجدول العادي لتجنب أخطاء pyarrow المرتفعة
-            event = st.dataframe(target_df_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event = st.dataframe(safe_display_df(target_df_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
@@ -520,7 +530,7 @@ else:
                         st.markdown("---")
                         st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
                     
                     st.markdown("---")
                     st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
@@ -549,7 +559,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == req_id:
+                                if int(row.get("id", 0)) == int(req_id):
                                     ws_p.update_cell(idx, 4, str(new_item_number))
                                     ws_p.update_cell(idx, 5, str(new_nupco_number))
                                     ws_p.update_cell(idx, 6, str(new_e_market_code))
@@ -602,9 +612,8 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
-            st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
-            event_app = st.dataframe(df_approve_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_app = st.dataframe(safe_display_df(df_approve_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
@@ -633,7 +642,7 @@ else:
                         st.markdown("---")
                         st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
                     
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار النهائي رقم: {app_req_id}")
@@ -668,7 +677,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == app_req_id:
+                                if int(row.get("id", 0)) == int(app_req_id):
                                     ws_p.update_cell(idx, 4, str(app_item_number))
                                     ws_p.update_cell(idx, 5, str(app_nupco_number))
                                     ws_p.update_cell(idx, 6, str(app_e_market_code))
@@ -720,9 +729,8 @@ else:
             })
             
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
-            st.markdown("⚠️ **مفتاح التلوين (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر من 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            event_emg = st.dataframe(df_emg_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_emg = st.dataframe(safe_display_df(df_emg_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
@@ -751,7 +759,7 @@ else:
                         st.markdown("---")
                         st.info(f"📌 **سجل الطلبات المشابهة السابقة للصنف الحالي:**")
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]], use_container_width=True)
+                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
 
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
@@ -780,7 +788,7 @@ else:
                             ws_p = get_worksheet("purchases")
                             all_rows = ws_p.get_all_records()
                             for idx, row in enumerate(all_rows, start=2):
-                                if row.get("id") == emg_req_id:
+                                if int(row.get("id", 0)) == int(emg_req_id):
                                     ws_p.update_cell(idx, 4, str(emg_item_number))
                                     ws_p.update_cell(idx, 5, str(emg_nupco_number))
                                     ws_p.update_cell(idx, 6, str(emg_e_market_code))
@@ -966,7 +974,7 @@ else:
             st.markdown("---")
             st.subheader("🚨 جدول تفصيلي لطلبات لجنة الشراء الطارئ المعتمدة")
             if not df_emg_approved.empty:
-                st.dataframe(df_emg_approved, use_container_width=True)
+                st.dataframe(safe_display_df(df_emg_approved), use_container_width=True)
             else:
                 st.info("لا توجد طلبات طارئة معتمدة نهائياً حتى الآن.")
 
@@ -974,7 +982,7 @@ else:
             st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
             df_app_dash = df_all[df_all['status'] == 'معتمد']
             if not df_app_dash.empty:
-                st.dataframe(df_app_dash, use_container_width=True)
+                st.dataframe(safe_display_df(df_app_dash), use_container_width=True)
             else:
                 st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
         else:
@@ -982,7 +990,7 @@ else:
         
         st.markdown("---")
         st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
-        st.dataframe(users_df, use_container_width=True)
+        st.dataframe(safe_display_df(users_df), use_container_width=True)
 
     # ==================== الشاشة السابعة (البحث الشامل في كافة الطلبات) ====================
     elif selected_screen == "الشاشة 7: البحث الشامل في كافة الطلبات":
@@ -1038,7 +1046,7 @@ else:
                 "reviewer_notes": "ملاحظات المراجعة", "approver_notes": "ملاحظات الاعتماد"
             })
             
-            st.dataframe(view_search_df, use_container_width=True)
+            st.dataframe(safe_display_df(view_search_df), use_container_width=True)
         else:
             st.info("لا توجد طلبات مسجلة في النظام للبحث عنها.")
 
@@ -1091,7 +1099,7 @@ else:
                     "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال",
                     "status": "الحالة", "admin_reply": "رد الإدارة"
                 })
-                st.dataframe(view_c_df, use_container_width=True)
+                st.dataframe(safe_display_df(view_c_df), use_container_width=True)
                 
                 if "مدير النظام (Admin)" in st.session_state.user_roles:
                     st.markdown("---")
@@ -1099,7 +1107,7 @@ else:
                     c_ids = display_df["id"].tolist()
                     selected_c_id = st.selectbox("اختر رقم الشكوى/الاقتراح للرد:", c_ids)
                     
-                    selected_c_row = display_df[display_df["id"] == selected_c_id].iloc[0]
+                    selected_c_row = display_df[df_c_all["id"] == selected_c_id].iloc[0]
                     st.write(f"**المستخدم:** {selected_c_row['username']} ({selected_c_row['hospital']})")
                     st.write(f"**المحتوى:** {selected_c_row['content']}")
                     
