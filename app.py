@@ -180,35 +180,6 @@ if 'form_item_name' not in st.session_state:
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
-# --- دوال تلوين الصفوف بناءً على أيام التأخير للشاشات ---
-def highlight_delay_standard(row):
-    try:
-        created = pd.to_datetime(row.get('تاريخ الإنشاء') or row.get('created_at'), errors='coerce')
-        if pd.isna(created):
-            return [''] * len(row)
-        days_diff = (datetime.now() - created).days
-        if days_diff >= 3:
-            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-        elif days_diff == 1:
-            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
-    except Exception:
-        pass
-    return [''] * len(row)
-
-def highlight_delay_screen4(row):
-    try:
-        created = pd.to_datetime(row.get('تاريخ الإنشاء') or row.get('created_at'), errors='coerce')
-        if pd.isna(created):
-            return [''] * len(row)
-        days_diff = (datetime.now() - created).days
-        if days_diff > 10:
-            return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-        elif 7 <= days_diff <= 10:
-            return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
-    except Exception:
-        pass
-    return [''] * len(row)
-
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
     st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
@@ -519,8 +490,8 @@ else:
                         st.success("تم الدمج بنجاح!")
                         st.rerun()
 
-            styled_review_df = target_df_view.style.apply(highlight_delay_standard, axis=1)
-            event = st.dataframe(styled_review_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            # تم استخدام الجدول العادي لتجنب أخطاء pyarrow المرتفعة
+            event = st.dataframe(target_df_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
@@ -633,8 +604,7 @@ else:
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
             st.markdown("⚠️ **مفتاح التلوين:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
-            styled_app_df = df_approve_view.style.apply(highlight_delay_standard, axis=1)
-            event_app = st.dataframe(styled_app_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_app = st.dataframe(df_approve_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
@@ -752,8 +722,7 @@ else:
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
             st.markdown("⚠️ **مفتاح التلوين (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر من 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            styled_emg_df = df_emg_view.style.apply(highlight_delay_screen4, axis=1)
-            event_emg = st.dataframe(styled_emg_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_emg = st.dataframe(df_emg_view, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
@@ -1022,7 +991,6 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
-            # تقييد الصلاحية حسب مستشفى المستخدم ما لم يكن أدمن
             if "مدير النظام (Admin)" in st.session_state.user_roles:
                 hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
             else:
@@ -1125,7 +1093,6 @@ else:
                 })
                 st.dataframe(view_c_df, use_container_width=True)
                 
-                # جزء إضافي لمدير النظام للرد على الشكاوى والاقتراحات
                 if "مدير النظام (Admin)" in st.session_state.user_roles:
                     st.markdown("---")
                     st.subheader("✍️ رد مدير النظام (Admin) على الشكاوى والاقتراحات")
