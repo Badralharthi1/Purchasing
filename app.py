@@ -193,15 +193,12 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-# تهيئة الذاكرة المؤقتة للنموذج
-for k in ['req_item_number', 'req_nupco_number', 'req_item_name', 'req_e_market', 'req_unit_price', 'req_quantity', 'req_reason']:
-    if k not in st.session_state:
-        if 'price' in k:
-            st.session_state[k] = 0.0
-        elif 'quantity' in k:
-            st.session_state[k] = 1
-        else:
-            st.session_state[k] = ""
+if 'selected_item_num' not in st.session_state:
+    st.session_state.selected_item_num = ""
+if 'selected_nupco' not in st.session_state:
+    st.session_state.selected_nupco = ""
+if 'selected_name' not in st.session_state:
+    st.session_state.selected_name = ""
 
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
@@ -399,9 +396,9 @@ else:
                 if st.button("📥 إدراج البيانات في النموذج"):
                     parts = [p.strip() for p in chosen_option.split("|")]
                     if len(parts) >= 3:
-                        st.session_state.req_item_number = parts[0]
-                        st.session_state.req_nupco_number = parts[1]
-                        st.session_state.req_item_name = parts[2]
+                        st.session_state.selected_item_num = parts[0]
+                        st.session_state.selected_nupco = parts[1]
+                        st.session_state.selected_name = parts[2]
                         st.success("✅ تم إدراج بيانات الصنف بنجاح في النموذج أدناه!")
                         st.rerun()
             else:
@@ -409,22 +406,22 @@ else:
 
         st.markdown("---")
         
-        # نموذج تقديم الطلب مع التفريغ الشامل
+        # نموذج تقديم الطلب مع التفريغ التلقائي الشامل عبر clear_on_submit=True
         with st.form("purchase_request_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                item_number_input = st.text_input("1. رقم البند *", key="req_item_number")
-                nupco_number_input = st.text_input("2. رقم نوبكو *", key="req_nupco_number")
-                e_market_code = st.text_input("3. كود السوق الالكتروني *", key="req_e_market")
+                item_number_input = st.text_input("1. رقم البند *", value=st.session_state.selected_item_num)
+                nupco_number_input = st.text_input("2. رقم نوبكو *", value=st.session_state.selected_nupco)
+                e_market_code = st.text_input("3. كود السوق الالكتروني *")
 
             with col2:
-                item_name_input = st.text_input("4. اسم الصنف *", key="req_item_name")
-                unit_price = st.number_input("5. السعر الأفرادي *", min_value=0.0, step=1.0, key="req_unit_price")
-                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, key="req_quantity")
+                item_name_input = st.text_input("4. اسم الصنف *", value=st.session_state.selected_name)
+                unit_price = st.number_input("5. السعر الأفرادي *", min_value=0.0, step=1.0, value=0.0)
+                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=1)
 
             with col3:
                 importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-                reason = st.text_area("8. السبب / المبررات", key="req_reason")
+                reason = st.text_area("8. السبب / المبررات")
 
             submitted = st.form_submit_button("إرسال الطلب")
             if submitted:
@@ -446,17 +443,13 @@ else:
                     ws_purchases = get_worksheet("purchases")
                     ws_purchases.append_row(list(new_row.values()))
                     
-                    # تفريغ كافة المتغيرات فوراً لإعادة تعيين النموذج كلياً
-                    st.session_state.req_item_number = ""
-                    st.session_state.req_nupco_number = ""
-                    st.session_state.req_item_name = ""
-                    st.session_state.req_e_market = ""
-                    st.session_state.req_unit_price = 0.0
-                    st.session_state.req_quantity = 1
-                    st.session_state.req_reason = ""
+                    # إعادة ضبط متغيرات الاختيار لتفريغ حقول القيم المجلوبة
+                    st.session_state.selected_item_num = ""
+                    st.session_state.selected_nupco = ""
+                    st.session_state.selected_name = ""
                     
                     load_data_to_session()
-                    st.success("✅ تم إرسال طلب الشراء السحابي وتفريغ كافة الحقول بنجاح!")
+                    st.success("✅ تم إرسال طلب الشراء وتفريغ كافة الحقول بنجاح!")
                     st.rerun()
 
         st.markdown("---")
