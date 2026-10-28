@@ -221,6 +221,48 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
+# --- دالة البحث الموحدة لعرض الطلبات المشابهة برقم البند أو رقم نوبكو ---
+def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num):
+    sel_item = clean_code_val(item_num)
+    sel_nupco = clean_code_val(nupco_num)
+    
+    if df_all_p.empty or (not sel_item and not sel_nupco):
+        return
+        
+    df_others = df_all_p[df_all_p["id"].astype(int) != int(current_req_id)].copy()
+    if df_others.empty:
+        return
+        
+    df_others["clean_item_num"] = df_others["item_number"].apply(clean_code_val)
+    df_others["clean_nupco_num"] = df_others["nupco_number"].apply(clean_code_val)
+    
+    cond_item = (df_others["clean_item_num"] == sel_item) & (sel_item != "")
+    cond_nupco = (df_others["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
+    
+    similar_orders = df_others[cond_item | cond_nupco]
+    
+    if not similar_orders.empty:
+        st.markdown("---")
+        st.info("📌 **سجل الطلبات السابقة المشابهة (معتمدة، مرفوضة، أو معلقة) لنفس (رقم البند أو رقم نوبكو):**")
+        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
+        
+        sim_view = similar_orders.rename(columns={
+            "id": "رقم الطلب", 
+            "hospital": "المستشفى", 
+            "item_number": "رقم البند", 
+            "nupco_number": "رقم نوبكو", 
+            "item_name": "اسم الصنف", 
+            "quantity": "الكمية", 
+            "total_cost": "الإجمالي", 
+            "status": "الحالة", 
+            "created_at": "تاريخ الإنشاء"
+        })
+        st.dataframe(
+            safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), 
+            use_container_width=True
+        )
+
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
     st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
@@ -540,36 +582,8 @@ else:
                 req_id = int(selected_row_data["id"])
                 co = selected_row_data
                 
-                sel_item_num = clean_code_val(co["item_number"])
-                sel_nupco = clean_code_val(co["nupco_number"])
-                
-                # الطلبات المشابهة في نفس الشاشة الثانية (التخطيط بالمستشفى) تشمل كل الحالات (معلقة، معتمدة سابقة، مرفوضة) في نفس الشاشة
-                if not df_all_p.empty:
-                    df_s2_all = df_all_p[
-                        (df_all_p["status"] == 'التخطيط بالمستشفى') & 
-                        (df_all_p["id"].astype(int) != req_id)
-                    ].copy()
-                    
-                    if not df_s2_all.empty:
-                        df_s2_all["clean_item_num"] = df_s2_all["item_number"].apply(clean_code_val)
-                        df_s2_all["clean_nupco_num"] = df_s2_all["nupco_number"].apply(clean_code_val)
-                        
-                        cond_item = (df_s2_all["clean_item_num"] == sel_item_num) & (sel_item_num != "")
-                        cond_nupco = (df_s2_all["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
-                        
-                        similar_orders = df_s2_all[cond_item | cond_nupco]
-                    else:
-                        similar_orders = pd.DataFrame()
-                else:
-                    similar_orders = pd.DataFrame()
-                
-                if not similar_orders.empty:
-                    st.markdown("---")
-                    st.info(f"📌 **الطلبات المشابهة في نفس الشاشة الحالية (التخطيط بالمستشفى) لنفس (رقم البند أو رقم نوبكو):**")
-                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
+                render_similar_orders_section(df_all_p, req_id, co["item_number"], co["nupco_number"])
                 
                 st.markdown("---")
                 st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
@@ -672,36 +686,8 @@ else:
                 app_req_id = int(selected_app_row["id"])
                 co = selected_app_row
                 
-                sel_item_num = clean_code_val(co["item_number"])
-                sel_nupco = clean_code_val(co["nupco_number"])
-                
-                # الطلبات المشابهة في نفس الشاشة الثالثة (التخطيط بالإمداد) فقط
-                if not df_all_p.empty:
-                    df_s3_all = df_all_p[
-                        (df_all_p["status"] == 'التخطيط بالإمداد') & 
-                        (df_all_p["id"].astype(int) != app_req_id)
-                    ].copy()
-                    
-                    if not df_s3_all.empty:
-                        df_s3_all["clean_item_num"] = df_s3_all["item_number"].apply(clean_code_val)
-                        df_s3_all["clean_nupco_num"] = df_s3_all["nupco_number"].apply(clean_code_val)
-                        
-                        cond_item = (df_s3_all["clean_item_num"] == sel_item_num) & (sel_item_num != "")
-                        cond_nupco = (df_s3_all["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
-                        
-                        similar_orders = df_s3_all[cond_item | cond_nupco]
-                    else:
-                        similar_orders = pd.DataFrame()
-                else:
-                    similar_orders = pd.DataFrame()
-                
-                if not similar_orders.empty:
-                    st.markdown("---")
-                    st.info(f"📌 **الطلبات المشابهة في نفس الشاشة الحالية (التخطيط بالإمداد) لنفس (رقم البند أو رقم نوبكو):**")
-                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
+                render_similar_orders_section(df_all_p, app_req_id, co["item_number"], co["nupco_number"])
                 
                 st.markdown("---")
                 st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار رقم: {app_req_id}")
@@ -804,36 +790,8 @@ else:
                 emg_req_id = int(selected_emg_row["id"])
                 co_emg = selected_emg_row
                 
-                sel_item_num = clean_code_val(co_emg["item_number"])
-                sel_nupco = clean_code_val(co_emg["nupco_number"])
-                
-                # الطلبات المشابهة في نفس الشاشة الرابعة (لجنة الشراء الطارئ) فقط
-                if not df_all_p.empty:
-                    df_s4_all = df_all_p[
-                        (df_all_p["status"] == 'لجنة الشراء الطارئ') & 
-                        (df_all_p["id"].astype(int) != emg_req_id)
-                    ].copy()
-                    
-                    if not df_s4_all.empty:
-                        df_s4_all["clean_item_num"] = df_s4_all["item_number"].apply(clean_code_val)
-                        df_s4_all["clean_nupco_num"] = df_s4_all["nupco_number"].apply(clean_code_val)
-                        
-                        cond_item = (df_s4_all["clean_item_num"] == sel_item_num) & (sel_item_num != "")
-                        cond_nupco = (df_s4_all["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
-                        
-                        similar_orders = df_s4_all[cond_item | cond_nupco]
-                    else:
-                        similar_orders = pd.DataFrame()
-                else:
-                    similar_orders = pd.DataFrame()
-
-                if not similar_orders.empty:
-                    st.markdown("---")
-                    st.info(f"📌 **الطلبات المشابهة في نفس الشاشة الحالية (لجنة الشراء الطارئ) لنفس (رقم البند أو رقم نوبكو):**")
-                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
+                render_similar_orders_section(df_all_p, emg_req_id, co_emg["item_number"], co_emg["nupco_number"])
 
                 st.markdown("---")
                 st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
