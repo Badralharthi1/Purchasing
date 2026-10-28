@@ -193,12 +193,15 @@ if 'logged_in' not in st.session_state:
     st.session_state.user_roles = []
     st.session_state.user_hospital = ""
 
-if 'form_item_number' not in st.session_state:
-    st.session_state.form_item_number = ""
-if 'form_nupco_number' not in st.session_state:
-    st.session_state.form_nupco_number = ""
-if 'form_item_name' not in st.session_state:
-    st.session_state.form_item_name = ""
+# تهيئة الذاكرة المؤقتة للنموذج
+for k in ['req_item_number', 'req_nupco_number', 'req_item_name', 'req_e_market', 'req_unit_price', 'req_quantity', 'req_reason']:
+    if k not in st.session_state:
+        if 'price' in k:
+            st.session_state[k] = 0.0
+        elif 'quantity' in k:
+            st.session_state[k] = 1
+        else:
+            st.session_state[k] = ""
 
 def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
@@ -396,36 +399,37 @@ else:
                 if st.button("📥 إدراج البيانات في النموذج"):
                     parts = [p.strip() for p in chosen_option.split("|")]
                     if len(parts) >= 3:
-                        st.session_state.form_item_number = parts[0]
-                        st.session_state.form_nupco_number = parts[1]
-                        st.session_state.form_item_name = parts[2]
+                        st.session_state.req_item_number = parts[0]
+                        st.session_state.req_nupco_number = parts[1]
+                        st.session_state.req_item_name = parts[2]
                         st.success("✅ تم إدراج بيانات الصنف بنجاح في النموذج أدناه!")
+                        st.rerun()
             else:
                 st.info("لا توجد نتائج مطابقة لبحثك في الدليل.")
 
         st.markdown("---")
         
-        # تفريغ الخانات فوراً بعد الإرسال
+        # نموذج تقديم الطلب مع التفريغ الشامل
         with st.form("purchase_request_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                item_number_input = st.text_input("1. رقم البند *", value=st.session_state.form_item_number)
-                nupco_number_input = st.text_input("2. رقم نوبكو *", value=st.session_state.form_nupco_number)
-                e_market_code = st.text_input("3. كود السوق الالكتروني *")
+                item_number_input = st.text_input("1. رقم البند *", key="req_item_number")
+                nupco_number_input = st.text_input("2. رقم نوبكو *", key="req_nupco_number")
+                e_market_code = st.text_input("3. كود السوق الالكتروني *", key="req_e_market")
 
             with col2:
-                item_name_input = st.text_input("4. اسم الصنف *", value=st.session_state.form_item_name)
-                unit_price = st.number_input("5. السعر الافرادي *", min_value=0.0, step=1.0, value=0.0)
-                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=1)
+                item_name_input = st.text_input("4. اسم الصنف *", key="req_item_name")
+                unit_price = st.number_input("5. السعر الأفرادي *", min_value=0.0, step=1.0, key="req_unit_price")
+                quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, key="req_quantity")
 
             with col3:
                 importance_criteria = st.selectbox("7. معيار الأهمية *", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
-                reason = st.text_area("8. السبب / المبررات")
+                reason = st.text_area("8. السبب / المبررات", key="req_reason")
 
             submitted = st.form_submit_button("إرسال الطلب")
             if submitted:
                 if not item_number_input.strip() or not nupco_number_input.strip() or not e_market_code.strip() or not item_name_input.strip() or unit_price <= 0 or quantity <= 0:
-                    st.error("❌ يرجى تعبئة كافة الحقول الإلزامية بصورة صحيحة.")
+                    st.error("❌ يرجى تعبئة كافة الحقول الإلزامية بصورة صحيحة (السعر والكمية يجب أن تكون أكبر من صفر).")
                 else:
                     df_all_p = st.session_state.db_purchases
                     new_id = int(df_all_p["id"].max()) + 1 if not df_all_p.empty and not pd.isna(df_all_p["id"].max()) else 1
@@ -442,10 +446,18 @@ else:
                     ws_purchases = get_worksheet("purchases")
                     ws_purchases.append_row(list(new_row.values()))
                     
-                    st.session_state.form_item_number = ""
-                    st.session_state.form_nupco_number = ""
-                    st.session_state.form_item_name = ""
-                    st.success("✅ تم إرسال طلب الشراء وتفريغ الحقول بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
+                    # تفريغ كافة المتغيرات فوراً لإعادة تعيين النموذج كلياً
+                    st.session_state.req_item_number = ""
+                    st.session_state.req_nupco_number = ""
+                    st.session_state.req_item_name = ""
+                    st.session_state.req_e_market = ""
+                    st.session_state.req_unit_price = 0.0
+                    st.session_state.req_quantity = 1
+                    st.session_state.req_reason = ""
+                    
+                    load_data_to_session()
+                    st.success("✅ تم إرسال طلب الشراء السحابي وتفريغ كافة الحقول بنجاح!")
+                    st.rerun()
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -1168,7 +1180,9 @@ else:
                         
                         ws_c = get_worksheet("complaints")
                         ws_c.append_row(list(new_c_row.values()))
-                        st.success("✅ تم إرسال مشاركتك وتفريغ الحقول بنجاح! (قم بالتحديث لعرضها)")
+                        load_data_to_session()
+                        st.success("✅ تم إرسال مشاركتك وتفريغ الحقول بنجاح!")
+                        st.rerun()
 
         with tab_view:
             st.subheader("📋 سجل الشكاوى والاقتراحات المسجلة")
@@ -1206,6 +1220,8 @@ else:
                                     ws_c.update_cell(idx, 7, "تم الرد")
                                     ws_c.update_cell(idx, 8, str(admin_reply_text))
                                     break
-                            st.success("✅ تم حفظ الرد وتفريغ حقل الرد بنجاح! (قم بالتحديث)")
+                            load_data_to_session()
+                            st.success("✅ تم حفظ الرد وتحديث البيانات بنجاح!")
+                            st.rerun()
             else:
                 st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
