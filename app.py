@@ -221,8 +221,8 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة البحث الموحدة لعرض الطلبات المشابهة برقم البند أو رقم نوبكو ---
-def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num):
+# --- دالة البحث الموحدة لعرض الطلبات المشابهة التي وصلت للشاشة الحالية أو تجاوزتها فقط ---
+def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num, screen_level):
     sel_item = clean_code_val(item_num)
     sel_nupco = clean_code_val(nupco_num)
     
@@ -233,6 +233,36 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num)
     if df_others.empty:
         return
         
+    # تحديد الحالات المسموح ظهورها بناءً على الشاشة الحالية (لكي لا تظهر طلبات الشاشات السابقة التي لم تصل بعد)
+    if screen_level == 2:
+        # الشاشة الثانية (التخطيط بالمستشفى): تظهر الطلبات المعلقة في التخطيط بالمستشفى أو المرفوضة منها
+        allowed_statuses = ["التخطيط بالمستشفى", "مرفوض من التخطيط بالمستشفى"]
+    elif screen_level == 3:
+        # الشاشة الثالثة (التخطيط بالإمداد): تظهر الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، لجنة الشراء الطارئ، معتمد، ومرفوضات الإمداد/الطوارئ)
+        allowed_statuses = [
+            "التخطيط بالإمداد", 
+            "مرفوض من التخطيط بالمستشفى", 
+            "مرفوض من التخطيط بالإمداد", 
+            "لجنة الشراء الطارئ", 
+            "مرفوض من لجنة الشراء الطارئ", 
+            "معتمد"
+        ]
+    elif screen_level == 4:
+        # الشاشة الرابعة (لجنة الشراء الطارئ): تظهر الطلبات التي وصلت للجنة الطوارئ فما فوق
+        allowed_statuses = [
+            "لجنة الشراء الطارئ", 
+            "مرفوض من التخطيط بالمستشفى", 
+            "مرفوض من التخطيط بالإمداد", 
+            "مرفوض من لجنة الشراء الطارئ", 
+            "معتمد"
+        ]
+    else:
+        allowed_statuses = []
+
+    df_others = df_others[df_others["status"].isin(allowed_statuses)]
+    if df_others.empty:
+        return
+
     df_others["clean_item_num"] = df_others["item_number"].apply(clean_code_val)
     df_others["clean_nupco_num"] = df_others["nupco_number"].apply(clean_code_val)
     
@@ -243,7 +273,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num)
     
     if not similar_orders.empty:
         st.markdown("---")
-        st.info("📌 **سجل الطلبات السابقة المشابهة (معتمدة، مرفوضة، أو معلقة) لنفس (رقم البند أو رقم نوبكو):**")
+        st.info("📌 **الطلبات السابقة المشابهة التي وصلت لهذه الشاشة أو تجاوزتها (معتمدة، مرفوضة، أو معلقة) لنفس (رقم البند أو رقم نوبكو):**")
         similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
         similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
         
@@ -582,8 +612,8 @@ else:
                 req_id = int(selected_row_data["id"])
                 co = selected_row_data
                 
-                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
-                render_similar_orders_section(df_all_p, req_id, co["item_number"], co["nupco_number"])
+                # استدعاء الدالة للشاشة الثانية (مستوى 2)
+                render_similar_orders_section(df_all_p, req_id, co["item_number"], co["nupco_number"], screen_level=2)
                 
                 st.markdown("---")
                 st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
@@ -686,8 +716,8 @@ else:
                 app_req_id = int(selected_app_row["id"])
                 co = selected_app_row
                 
-                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
-                render_similar_orders_section(df_all_p, app_req_id, co["item_number"], co["nupco_number"])
+                # استدعاء الدالة للشاشة الثالثة (مستوى 3)
+                render_similar_orders_section(df_all_p, app_req_id, co["item_number"], co["nupco_number"], screen_level=3)
                 
                 st.markdown("---")
                 st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار رقم: {app_req_id}")
@@ -790,8 +820,8 @@ else:
                 emg_req_id = int(selected_emg_row["id"])
                 co_emg = selected_emg_row
                 
-                # استدعاء دالة عرض الطلبات المشابهة السابقة (معتمدة، مرفوضة، أو معلقة) لنفس رقم البند أو نوبكو
-                render_similar_orders_section(df_all_p, emg_req_id, co_emg["item_number"], co_emg["nupco_number"])
+                # استدعاء الدالة للشاشة الرابعة (مستوى 4)
+                render_similar_orders_section(df_all_p, emg_req_id, co_emg["item_number"], co_emg["nupco_number"], screen_level=4)
 
                 st.markdown("---")
                 st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
