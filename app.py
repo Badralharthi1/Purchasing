@@ -117,7 +117,6 @@ def load_data_to_session():
             df_p = pd.DataFrame(recs_p)
             df_p.columns = [str(c).strip() for c in df_p.columns]
             
-            # --- ضمان تحويل الأرقام والأسعار بدقة تامة ومنع اختفائها ---
             if "id" in df_p.columns:
                 df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce").fillna(0).astype(int)
             if "unit_price" in df_p.columns:
@@ -194,7 +193,6 @@ def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
 def safe_display_df(df):
-    """تنسيق آمن للأعمدة لضمان ظهور الأسعار والأرقام بدون أخطاء pyarrow"""
     if df.empty:
         return df
     safe_df = df.copy()
@@ -546,7 +544,7 @@ else:
                     
                     st.markdown("---")
                     st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
-                    with st.form("edit_review_form"):
+                    with st.form(f"edit_review_form_{req_id}", clear_on_submit=False):
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             new_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
@@ -554,7 +552,6 @@ else:
                             new_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
                         with c2:
                             new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
-                            # استرجاع السعر الأفرادي المحفوظ بدقة تامة
                             saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
                             new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
                             saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
@@ -591,7 +588,10 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            st.success("✅ تم تحديث الطلب بنجاح! (قم بتحديث البيانات)")
+                            # تحديث الذاكرة المحلية فوراً لينتقل الطلب للشاشة التالية ويختفي من القائمة الحالية
+                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == req_id, "status"] = new_status
+                            st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
+                            st.rerun()
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
@@ -672,7 +672,7 @@ else:
                     
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار رقم: {app_req_id}")
-                    with st.form("approval_action_form"):
+                    with st.form(f"approval_action_form_{app_req_id}", clear_on_submit=False):
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             app_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
@@ -716,7 +716,9 @@ else:
                                     ws_p.update_cell(idx, 16, str(now_str))
                                     ws_p.update_cell(idx, 18, str(approver_notes))
                                     break
-                            st.success("✅ تم تحديث الطلب وتنفيذ القرار بنجاح! (قم بتحديث البيانات)")
+                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == app_req_id, "status"] = final_status
+                            st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
+                            st.rerun()
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد في ({selected_app_filter}).")
 
@@ -738,14 +740,16 @@ else:
             df_emergency = pd.DataFrame()
 
         if not df_emergency.empty:
-            excel_bytes_emg = to_excel_bytes(df_emergency)
-            st.download_button(
-                label="📥 تصدير قائمة طلبات الطوارئ الحالية إلى ملف Excel (.xls)",
-                data=excel_bytes_emg,
-                file_name=f"emergency_current_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
-                mime="application/vnd.ms-excel"
-            )
-            st.markdown("---")
+            df_emergency_approved_export = df_emergency[df_emergency["status"] == "معتمد"]
+            if not df_emergency_approved_export.empty:
+                excel_bytes_emg = to_excel_bytes(df_emergency_approved_export)
+                st.download_button(
+                    label="📥 تصدير قائمة طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
+                    data=excel_bytes_emg,
+                    file_name=f"emergency_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                    mime="application/vnd.ms-excel"
+                )
+                st.markdown("---")
         
         if not df_emergency.empty:
             df_emg_view = df_emergency.rename(columns={
@@ -792,7 +796,7 @@ else:
 
                     st.markdown("---")
                     st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
-                    with st.form("emergency_action_form"):
+                    with st.form(f"emergency_action_form_{emg_req_id}", clear_on_submit=False):
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             emg_item_number = st.text_input("رقم البند", value=str(co_emg["item_number"]), key="emg_in")
@@ -836,7 +840,9 @@ else:
                                     ws_p.update_cell(idx, 16, str(now_str))
                                     ws_p.update_cell(idx, 18, str(emg_notes))
                                     break
-                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح! (قم بتحديث البيانات)")
+                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == emg_req_id, "status"] = emg_final_status
+                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
+                            st.rerun()
         else:
             st.info(f"لا توجد طلبات طارئة بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
 
@@ -1094,9 +1100,10 @@ else:
 
             st.markdown(f"**عدد النتائج المطابقة:** `{len(filtered_df)}` طلب")
             
+            # التصدير في شاشة البحث الشامل يكون لكامل الطلبات بناء على الصلاحيات والفلترة الحالية
             excel_bytes_search = to_excel_bytes(filtered_df)
             st.download_button(
-                label="📥 تصدير نتيجة البحث إلى ملف Excel (.xls)",
+                label="📥 تصدير نتيجة البحث (كامل الطلبات المطابقة) إلى ملف Excel (.xls)",
                 data=excel_bytes_search,
                 file_name=f"search_results_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
                 mime="application/vnd.ms-excel"
