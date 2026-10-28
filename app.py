@@ -536,14 +536,14 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
-                # إظهار الطلبات المعتمدة نهائياً فقط (واستبعاد المعلقة، غير المعتمدة، والمرفوضة) في سجل الطلبات السابقة
+                # مطابقة مرنة للطلبات المعتمدة السابقة (تطابق أي من الحقول المتوفرة)
                 if not df_all_p.empty:
+                    cond_item = (df_all_p["item_number"] == sel_item_num) & (sel_item_num != "") if sel_item_num else False
+                    cond_nupco = (df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "") if sel_nupco else False
+                    cond_name = (df_all_p["item_name"] == sel_name) & (sel_name != "") if sel_name else False
+                    
                     similar_orders = df_all_p[
-                        (
-                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                        ) & 
+                        (cond_item | cond_nupco | cond_name) & 
                         (df_all_p["id"] != req_id) &
                         (df_all_p["status"] == "معتمد")
                     ]
@@ -663,14 +663,14 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
-                # إظهار الطلبات المعتمدة نهائياً فقط في شاشة الإمداد
+                # مطابقة مرنة للطلبات المعتمدة السابقة في الإمداد
                 if not df_all_p.empty:
+                    cond_item = (df_all_p["item_number"] == sel_item_num) & (sel_item_num != "") if sel_item_num else False
+                    cond_nupco = (df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "") if sel_nupco else False
+                    cond_name = (df_all_p["item_name"] == sel_name) & (sel_name != "") if sel_name else False
+                    
                     similar_orders = df_all_p[
-                        (
-                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                        ) & 
+                        (cond_item | cond_nupco | cond_name) & 
                         (df_all_p["id"] != app_req_id) &
                         (df_all_p["status"] == "معتمد")
                     ]
@@ -790,14 +790,14 @@ else:
                 sel_nupco = str(co_emg["nupco_number"]).strip()
                 sel_name = str(co_emg["item_name"]).strip()
                 
-                # إظهار الطلبات المعتمدة نهائياً فقط في لجنة الطوارئ
+                # مطابقة مرنة للطلبات المعتمدة السابقة في لجنة الطوارئ
                 if not df_all_p.empty:
+                    cond_item = (df_all_p["item_number"] == sel_item_num) & (sel_item_num != "") if sel_item_num else False
+                    cond_nupco = (df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "") if sel_nupco else False
+                    cond_name = (df_all_p["item_name"] == sel_name) & (sel_name != "") if sel_name else False
+                    
                     similar_orders = df_all_p[
-                        (
-                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                        ) & 
+                        (cond_item | cond_nupco | cond_name) & 
                         (df_all_p["id"] != emg_req_id) &
                         (df_all_p["status"] == "معتمد")
                     ]
