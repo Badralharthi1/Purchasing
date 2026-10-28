@@ -32,16 +32,26 @@ st.markdown("""
         margin-top: 10px;
         margin-bottom: 25px;
     }
+    /* تصميم الأزرار ثلاثية الأبعاد (3D Buttons) */
     div.stButton > button:first-child {
-        background-color: #28a745;
+        background: linear-gradient(135deg, #28a745 0%, #218838 100%);
         color: white;
-        border-radius: 8px;
+        border-radius: 10px;
         font-weight: bold;
         border: none;
+        border-bottom: 4px solid #1e7e34;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        transition: all 0.1s ease;
     }
     div.stButton > button:first-child:hover {
-        background-color: #218838;
-        color: white;
+        background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.25);
+        transform: translateY(-1px);
+    }
+    div.stButton > button:first-child:active {
+        transform: translateY(2px);
+        border-bottom: 2px solid #1e7e34;
+        box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
     }
     [data-testid="stMetricValue"] {
         font-size: 1.8rem;
@@ -394,7 +404,8 @@ else:
 
         st.markdown("---")
         
-        with st.form("purchase_request_form"):
+        # تم تفعيل تفريغ الخانات تلقائياً عند الإرسال clear_on_submit=True
+        with st.form("purchase_request_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
                 item_number_input = st.text_input("1. رقم البند *", value=st.session_state.form_item_number)
@@ -433,7 +444,7 @@ else:
                     st.session_state.form_item_number = ""
                     st.session_state.form_nupco_number = ""
                     st.session_state.form_item_name = ""
-                    st.success("✅ تم إرسال طلب الشراء للسحابة بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
+                    st.success("✅ تم إرسال طلب الشراء للسحابة وتفريغ الخانات بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -588,7 +599,6 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            # تحديث الذاكرة المحلية فوراً لينتقل الطلب للشاشة التالية ويختفي من القائمة الحالية
                             st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == req_id, "status"] = new_status
                             st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
                             st.rerun()
@@ -733,16 +743,14 @@ else:
         if not df_all_p.empty:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
-            df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
+            
+            # استخراج الطلبات المعتمدة حصراً للتصدير في الشاشة الرابعة بناءً على الفلتر
+            df_emg_approved_export = df_all_p[df_all_p["status"] == 'معتمد']
             if selected_emg_filter != "جميع المستشفيات":
-                df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
-        else:
-            df_emergency = pd.DataFrame()
+                df_emg_approved_export = df_emg_approved_export[df_emg_approved_export["hospital"] == selected_emg_filter]
 
-        if not df_emergency.empty:
-            df_emergency_approved_export = df_emergency[df_emergency["status"] == "معتمد"]
-            if not df_emergency_approved_export.empty:
-                excel_bytes_emg = to_excel_bytes(df_emergency_approved_export)
+            if not df_emg_approved_export.empty:
+                excel_bytes_emg = to_excel_bytes(df_emg_approved_export)
                 st.download_button(
                     label="📥 تصدير قائمة طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
                     data=excel_bytes_emg,
@@ -750,6 +758,12 @@ else:
                     mime="application/vnd.ms-excel"
                 )
                 st.markdown("---")
+
+            df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
+            if selected_emg_filter != "جميع المستشفيات":
+                df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
+        else:
+            df_emergency = pd.DataFrame()
         
         if not df_emergency.empty:
             df_emg_view = df_emergency.rename(columns={
@@ -757,7 +771,7 @@ else:
                 "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب", "created_at": "تاريخ الإنشاء"
             })
             
-            st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
+            st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً بانتظار الاعتماد)")
             st.markdown("⚠️ **مفتاح تلوين التأخير (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             event_emg = st.dataframe(safe_display_df(df_emg_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
@@ -1100,7 +1114,6 @@ else:
 
             st.markdown(f"**عدد النتائج المطابقة:** `{len(filtered_df)}` طلب")
             
-            # التصدير في شاشة البحث الشامل يكون لكامل الطلبات بناء على الصلاحيات والفلترة الحالية
             excel_bytes_search = to_excel_bytes(filtered_df)
             st.download_button(
                 label="📥 تصدير نتيجة البحث (كامل الطلبات المطابقة) إلى ملف Excel (.xls)",
