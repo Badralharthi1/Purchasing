@@ -32,8 +32,8 @@ st.markdown("""
         margin-top: 10px;
         margin-bottom: 25px;
     }
-    /* تصميم الأزرار ثلاثية الأبعاد (3D Buttons) */
-    div.stButton > button:first-child {
+    /* تصميم موحد لكافة الأزرار بشكل ثلاثي الأبعاد (3D Buttons) */
+    div.stButton > button:first-child, div.stFormSubmitButton > button:first-child {
         background: linear-gradient(135deg, #28a745 0%, #218838 100%);
         color: white;
         border-radius: 10px;
@@ -42,13 +42,14 @@ st.markdown("""
         border-bottom: 4px solid #1e7e34;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
         transition: all 0.1s ease;
+        width: 100%;
     }
-    div.stButton > button:first-child:hover {
+    div.stButton > button:first-child:hover, div.stFormSubmitButton > button:first-child:hover {
         background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
         box-shadow: 0 6px 8px rgba(0, 0, 0, 0.25);
         transform: translateY(-1px);
     }
-    div.stButton > button:first-child:active {
+    div.stButton > button:first-child:active, div.stFormSubmitButton > button:first-child:active {
         transform: translateY(2px);
         border-bottom: 2px solid #1e7e34;
         box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2);
@@ -404,7 +405,7 @@ else:
 
         st.markdown("---")
         
-        # تم تفعيل تفريغ الخانات تلقائياً عند الإرسال clear_on_submit=True
+        # تفريغ الخانات فوراً بعد الإرسال
         with st.form("purchase_request_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -444,7 +445,7 @@ else:
                     st.session_state.form_item_number = ""
                     st.session_state.form_nupco_number = ""
                     st.session_state.form_item_name = ""
-                    st.success("✅ تم إرسال طلب الشراء للسحابة وتفريغ الخانات بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
+                    st.success("✅ تم إرسال طلب الشراء وتفريغ الحقول بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -744,7 +745,7 @@ else:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             
-            # استخراج الطلبات المعتمدة حصراً للتصدير في الشاشة الرابعة بناءً على الفلتر
+            # تصدير الطلبات المعتمدة حصراً في الشاشة الرابعة
             df_emg_approved_export = df_all_p[df_all_p["status"] == 'معتمد']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emg_approved_export = df_emg_approved_export[df_emg_approved_export["hospital"] == selected_emg_filter]
@@ -1167,7 +1168,7 @@ else:
                         
                         ws_c = get_worksheet("complaints")
                         ws_c.append_row(list(new_c_row.values()))
-                        st.success("✅ تم إرسال مشاركتك بنجاح! (قم بالتحديث لعرضها)")
+                        st.success("✅ تم إرسال مشاركتك وتفريغ الحقول بنجاح! (قم بالتحديث لعرضها)")
 
         with tab_view:
             st.subheader("📋 سجل الشكاوى والاقتراحات المسجلة")
@@ -1205,6 +1206,6 @@ else:
                                     ws_c.update_cell(idx, 7, "تم الرد")
                                     ws_c.update_cell(idx, 8, str(admin_reply_text))
                                     break
-                            st.success("✅ تم حفظ الرد ومسح النموذج بنجاح! (قم بالتحديث)")
+                            st.success("✅ تم حفظ الرد وتفريغ حقل الرد بنجاح! (قم بالتحديث)")
             else:
                 st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
