@@ -249,7 +249,7 @@ if not st.session_state.logged_in:
                     else:
                         ws_users = get_worksheet("users")
                         ws_users.append_row([new_user, make_hashes(new_pass), ",".join(requested_roles), "قيد الانتظار", selected_hospital])
-                        st.success("✅ تم إرسال طلبك بنجاح! (سيتم تفعيل الحساب بعد التحديث اليدوي للأدمن)")
+                        st.success("✅ تم إرسال طلبك بنجاح!")
                 else:
                     st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى والصلاحية.")
 
@@ -431,6 +431,8 @@ else:
         df_all_p = st.session_state.db_purchases
         df_my_orders = df_all_p[df_all_p["requester"] == st.session_state.username] if not df_all_p.empty else pd.DataFrame()
         if not df_my_orders.empty:
+            df_my_orders["unit_price"] = pd.to_numeric(df_my_orders["unit_price"], errors="coerce").fillna(0.0)
+            df_my_orders["total_cost"] = pd.to_numeric(df_my_orders["total_cost"], errors="coerce").fillna(0.0)
             df_my_orders = df_my_orders.rename(columns={
                 "id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند",
                 "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق",
@@ -455,6 +457,8 @@ else:
             df_review = pd.DataFrame()
         
         if not df_review.empty:
+            df_review["unit_price"] = pd.to_numeric(df_review["unit_price"], errors="coerce").fillna(0.0)
+            df_review["total_cost"] = pd.to_numeric(df_review["total_cost"], errors="coerce").fillna(0.0)
             df_review_view = df_review.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
                 "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق", "item_name": "اسم الصنف",
@@ -523,6 +527,8 @@ else:
                     if not similar_orders.empty:
                         st.markdown("---")
                         st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالمستشفى:**")
+                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
                     
@@ -567,7 +573,7 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            st.success("✅ تم تحديث الطلب بنجاح! (اضغط زر التحديث الجانبي لعرض التغييرات)")
+                            st.success("✅ تم تحديث الطلب بنجاح! (قم بتحديث البيانات)")
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
@@ -579,7 +585,13 @@ else:
         st.header(f"✅ الشاشة الثالثة: إدارة التخطيط بالإمداد ({selected_app_filter})")
         df_all_p = st.session_state.db_purchases
         
-        df_all_approved = df_all_p[df_all_p["status"] == 'معتمد'] if not df_all_p.empty else pd.DataFrame()
+        if not df_all_p.empty:
+            df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
+            df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
+            df_all_approved = df_all_p[df_all_p["status"] == 'معتمد']
+        else:
+            df_all_approved = pd.DataFrame()
+
         if not df_all_approved.empty:
             excel_bytes = to_excel_bytes(df_all_approved)
             st.download_button(
@@ -634,6 +646,8 @@ else:
                     if not similar_orders.empty:
                         st.markdown("---")
                         st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالإمداد:**")
+                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
                     
@@ -691,6 +705,8 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
+            df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
+            df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
@@ -744,6 +760,8 @@ else:
                     if not similar_orders.empty:
                         st.markdown("---")
                         st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في لجنة الشراء الطارئ:**")
+                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                         sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
                         st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
 
@@ -828,7 +846,6 @@ else:
                                     if cell:
                                         ws_u.delete_rows(cell.row)
                                         st.success(f"تم حذف المستخدم {u_name} (قم بالتحديث)")
-                                        st.rerun()
                         st.markdown("---")
                 
                 st.subheader("👤 تعديل صلاحيات وحالة مستخدم (الموافقة على الحسابات وكلمات المرور)")
@@ -885,11 +902,21 @@ else:
         df_all = st.session_state.db_purchases
         users_df = st.session_state.db_users
         
-        dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
-        if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
-            df_all = df_all[df_all['hospital'] == dash_hosp_filter]
+        # الملاحظة 2: تصفية الداش بورد بناءً على صلاحيات المستشفى للمستخدم
+        if "مدير النظام (Admin)" in st.session_state.user_roles:
+            dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
+            if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
+                df_all = df_all[df_all['hospital'] == dash_hosp_filter]
+        else:
+            dash_hosp_filter = st.session_state.user_hospital
+            st.info(f"📌 يتم استعراض لوحة المؤشرات الخاصة بمستشفى: **{dash_hosp_filter}**")
+            if not df_all.empty:
+                df_all = df_all[df_all['hospital'] == dash_hosp_filter]
         
         if not df_all.empty:
+            df_all["unit_price"] = pd.to_numeric(df_all["unit_price"], errors="coerce").fillna(0.0)
+            df_all["total_cost"] = pd.to_numeric(df_all["total_cost"], errors="coerce").fillna(0.0)
+            
             total_orders = len(df_all)
             
             # --- 1. إدارة تخطيط المستشفى ---
@@ -966,26 +993,25 @@ else:
             dc3.metric("معدل تأخير (شاشة لجنة الشراء الطارئ)", f"{avg_delay_s4:.1f} يوم")
             
             st.markdown("---")
-            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى: الإجمالي مقابل تفاصيل المراحل)")
+            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى: مجموع الطلبات المرفوعة ومعتمدة/مرفوضة للمراحل)")
             
-            # --- الملاحظة 3: تجهيز شارت عمودين لكل مستشفى (الإجمالي والمراحل) ---
+            # --- الملاحظة 3: تجهيز شارت عمودين لكل مستشفى ---
             chart_data_list = []
-            for hosp in HOSPITALS_LIST:
-                h_df = df_all[df_all['hospital'] == hosp]
+            target_hospitals_for_chart = HOSPITALS_LIST if "مدير النظام (Admin)" in st.session_state.user_roles else [st.session_state.user_hospital]
+            
+            for hosp in target_hospitals_for_chart:
+                h_df = st.session_state.db_purchases[st.session_state.db_purchases['hospital'] == hosp] if not st.session_state.db_purchases.empty else pd.DataFrame()
                 tot_req = len(h_df)
                 h_app = len(h_df[h_df['status'] == 'معتمد'])
                 h_rej = len(h_df[h_df['status'].str.contains('مرفوض', na=False)])
                 h_pen = tot_req - (h_app + h_rej)
                 
-                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "مجموع الطلبات المرفوعة", "العدد": tot_req})
-                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات معتمدة", "العدد": h_app})
-                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات مرفوضة", "العدد": h_rej})
-                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات معلقة", "العدد": h_pen})
+                chart_data_list.append({"المستشفى": hosp, "مجموع الطلبات المرفوعة": tot_req, "طلبات معتمدة": h_app, "طلبات مرفوضة": h_rej, "طلبات معلقة": h_pen})
             
             df_chart = pd.DataFrame(chart_data_list)
             if not df_chart.empty:
-                pivot_chart = df_chart.pivot(index="المستشفى", columns="نوع المؤشر", values="العدد").fillna(0)
-                st.bar_chart(pivot_chart)
+                df_chart.set_index("المستشفى", inplace=True)
+                st.bar_chart(df_chart)
 
             st.markdown("---")
             st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
@@ -997,9 +1023,10 @@ else:
         else:
             st.info("لا توجد بيانات مسجلة في النظام بعد.")
         
-        st.markdown("---")
-        st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
-        st.dataframe(safe_display_df(users_df), use_container_width=True)
+        if "مدير النظام (Admin)" in st.session_state.user_roles:
+            st.markdown("---")
+            st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
+            st.dataframe(safe_display_df(users_df), use_container_width=True)
 
     # ==================== الشاشة السابعة (البحث الشامل في كافة الطلبات) ====================
     elif selected_screen == "الشاشة 7: البحث الشامل في كافة الطلبات":
@@ -1008,11 +1035,15 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
+            df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
+            df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
+            
+            # الملاحظة 2: تقييد البحث الشامل بناءً على صلاحيات مستشفى المستخدم
             if "مدير النظام (Admin)" in st.session_state.user_roles:
                 hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
             else:
                 hosp_filter = st.session_state.user_hospital
-                st.info(f"📌 يتم البحث حالياً في طلبات مستشفى: **{st.session_state.user_hospital}**")
+                st.info(f"📌 يتم البحث حصراً في طلبات مستشفى: **{st.session_state.user_hospital}**")
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1021,8 +1052,11 @@ else:
                 status_filter = st.selectbox("تصفية حسب الحالة:", ["الكل"] + df_all_p['status'].dropna().unique().tolist())
 
             filtered_df = df_all_p.copy()
-            if hosp_filter != "الكل":
-                filtered_df = filtered_df[filtered_df['hospital'] == hosp_filter]
+            if "مدير النظام (Admin)" in st.session_state.user_roles:
+                if hosp_filter != "الكل":
+                    filtered_df = filtered_df[filtered_df['hospital'] == hosp_filter]
+            else:
+                filtered_df = filtered_df[filtered_df['hospital'] == st.session_state.user_hospital]
                 
             if search_text.strip():
                 st_q = search_text.strip().lower()
