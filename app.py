@@ -440,18 +440,16 @@ else:
                         "reviewer_notes": "", "approver_notes": "", "edit_history": ""
                     }
                     
-                    # حفظ الصف في الذاكرة المحلية والارسال المباشر للسحابة بدون تعطيل الواجهة
                     ws_purchases = get_worksheet("purchases")
                     ws_purchases.append_row(list(new_row.values()))
                     
                     st.session_state.db_purchases = pd.concat([st.session_state.db_purchases, pd.DataFrame([new_row])], ignore_index=True)
                     
-                    # إعادة ضبط بيانات الإدراج
                     st.session_state.selected_item_num = ""
                     st.session_state.selected_nupco = ""
                     st.session_state.selected_name = ""
                     
-                    st.success("✅ تم إرسال طلب الشراء وتفريغ كافة الحقول بنجاح! (يمكنك التحديث لاحقاً من الشريط الجانبي عند الحاجة)")
+                    st.success("✅ تم إرسال طلب الشراء وتفريغ كافة الحقول بنجاح!")
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -530,7 +528,6 @@ else:
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
-                # الجلب الصارم لـ id المباشر من الصف المحدد بالجدول لمنع الاختلاف
                 selected_row_data = target_df.iloc[selected_rows[0]]
                 req_id = int(selected_row_data["id"])
                 co = selected_row_data
@@ -539,6 +536,7 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
+                # إظهار كافة الطلبات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف في هذه الشاشة
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -546,15 +544,14 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != req_id) &
-                        (df_all_p["status"].isin(["التخطيط بالإمداد", "مرفوض من التخطيط بالمستشفى"]))
+                        (df_all_p["id"] != req_id)
                     ]
                 else:
                     similar_orders = pd.DataFrame()
                 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالمستشفى:**")
+                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
@@ -665,6 +662,7 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
+                # إظهار كافة الطلبات السابقة (المعتمدة، المرفوضة، المعلقة) في شاشة الإمداد
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -672,15 +670,14 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != app_req_id) &
-                        (df_all_p["status"].isin(["لجنة الشراء الطارئ", "معتمد", "مرفوض من التخطيط بالإمداد"]))
+                        (df_all_p["id"] != app_req_id)
                     ]
                 else:
                     similar_orders = pd.DataFrame()
                 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالإمداد:**")
+                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
@@ -750,7 +747,6 @@ else:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             
-            # تصدير الطلبات المعتمدة حصراً في الشاشة الرابعة
             df_emg_approved_export = df_all_p[df_all_p["status"] == 'معتمد']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emg_approved_export = df_emg_approved_export[df_emg_approved_export["hospital"] == selected_emg_filter]
@@ -792,6 +788,7 @@ else:
                 sel_nupco = str(co_emg["nupco_number"]).strip()
                 sel_name = str(co_emg["item_name"]).strip()
                 
+                # إظهار كافة الطلبات السابقة في لجنة الطوارئ
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -799,15 +796,14 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != emg_req_id) &
-                        (df_all_p["status"].isin(["معتمد", "مرفوض من لجنة الشراء الطارئ"]))
+                        (df_all_p["id"] != emg_req_id)
                     ]
                 else:
                     similar_orders = pd.DataFrame()
 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في لجنة الشراء الطارئ:**")
+                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
@@ -948,7 +944,7 @@ else:
                             else:
                                 ws_u = get_worksheet("users")
                                 ws_u.append_row([new_u_name, make_hashes(new_u_pass), ",".join(new_u_roles), "معتمد", new_u_hosp])
-                                st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح! (قم بالتحديث)")
+                                st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح! (قم بتحديث البيانات)")
 
     # ==================== الشاشة السادسة (Dashboard التفصيلية) ====================
     elif selected_screen == "الشاشة 6: لوحة التحكّم التفصيلية (Dashboard)":
