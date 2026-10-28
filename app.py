@@ -116,14 +116,25 @@ def load_data_to_session():
         else:
             df_p = pd.DataFrame(recs_p)
             df_p.columns = [str(c).strip() for c in df_p.columns]
+            
+            # --- ضمان تحويل الأرقام والأسعار بدقة تامة ومنع اختفائها ---
             if "id" in df_p.columns:
                 df_p["id"] = pd.to_numeric(df_p["id"], errors="coerce").fillna(0).astype(int)
             if "unit_price" in df_p.columns:
                 df_p["unit_price"] = pd.to_numeric(df_p["unit_price"], errors="coerce").fillna(0.0)
+            else:
+                df_p["unit_price"] = 0.0
+                
             if "quantity" in df_p.columns:
                 df_p["quantity"] = pd.to_numeric(df_p["quantity"], errors="coerce").fillna(1).astype(int)
+            else:
+                df_p["quantity"] = 1
+                
             if "total_cost" in df_p.columns:
                 df_p["total_cost"] = pd.to_numeric(df_p["total_cost"], errors="coerce").fillna(0.0)
+            else:
+                df_p["total_cost"] = df_p["unit_price"] * df_p["quantity"]
+                
             st.session_state.db_purchases = df_p
     except Exception:
         if 'db_purchases' not in st.session_state:
@@ -452,13 +463,13 @@ else:
         df_all_p = st.session_state.db_purchases
         
         if not df_all_p.empty:
+            df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
+            df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             df_review = df_all_p[(df_all_p["status"] == 'التخطيط بالمستشفى') & (df_all_p["hospital"] == review_hospital)]
         else:
             df_review = pd.DataFrame()
         
         if not df_review.empty:
-            df_review["unit_price"] = pd.to_numeric(df_review["unit_price"], errors="coerce").fillna(0.0)
-            df_review["total_cost"] = pd.to_numeric(df_review["total_cost"], errors="coerce").fillna(0.0)
             df_review_view = df_review.rename(columns={
                 "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
                 "nupco_number": "رقم نوبكو", "e_market_code": "كود السوق", "item_name": "اسم الصنف",
@@ -543,10 +554,12 @@ else:
                             new_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
                         with c2:
                             new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
-                            new_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
-                            new_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
+                            # استرجاع السعر الأفرادي المحفوظ بدقة تامة
+                            saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
+                            new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                            saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
+                            new_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
                         with c3:
-                            # إصلاح مشكلة تغيير معيار الأهمية بالتقاط القيمة المخزنة فعلياً
                             curr_imp = str(co["importance_criteria"])
                             imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
                             imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
@@ -667,10 +680,11 @@ else:
                             app_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
                         with c2:
                             app_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
-                            app_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
-                            app_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
+                            saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
+                            app_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                            saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
+                            app_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
                         with c3:
-                            # الحفاظ على معيار الأهمية المخزن وعدم تغييره تلقائياً
                             curr_imp = str(co["importance_criteria"])
                             imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
                             imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
@@ -786,10 +800,11 @@ else:
                             emg_e_market_code = st.text_input("كود السوق", value=str(co_emg["e_market_code"]), key="emg_em")
                         with c2:
                             emg_item_name = st.text_input("اسم الصنف", value=str(co_emg["item_name"]), key="emg_na")
-                            emg_unit_price = st.number_input("السعر الأفرادي", value=float(co_emg["unit_price"]), min_value=0.0, key="emg_pr")
-                            emg_quantity = st.number_input("الكمية", value=int(co_emg["quantity"]), min_value=1, step=1, key="emg_qu")
+                            saved_unit_price = float(co_emg["unit_price"]) if not pd.isna(co_emg["unit_price"]) else 0.0
+                            emg_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="emg_pr")
+                            saved_qty = int(co_emg["quantity"]) if not pd.isna(co_emg["quantity"]) else 1
+                            emg_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="emg_qu")
                         with c3:
-                            # الحفاظ على معيار الأهمية وعدم تغييره
                             curr_imp = str(co_emg["importance_criteria"])
                             imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
                             imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
