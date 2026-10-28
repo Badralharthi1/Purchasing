@@ -467,6 +467,7 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
@@ -496,7 +497,7 @@ else:
                                 if int(row.get("id", 0)) == int(remove_id):
                                     ws_p.delete_rows(idx)
                                     break
-                        st.success("تم الدمج بنجاح! (قم بتحديث البيانات لعرض النتائج)")
+                        st.success("تم الدمج بنجاح! (قم بتحديث البيانات)")
 
             event = st.dataframe(safe_display_df(target_df_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
@@ -545,7 +546,11 @@ else:
                             new_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
                             new_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
                         with c3:
-                            new_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                            # إصلاح مشكلة تغيير معيار الأهمية بالتقاط القيمة المخزنة فعلياً
+                            curr_imp = str(co["importance_criteria"])
+                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                            new_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
                             new_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         review_notes = st.text_input("ملاحظات المراجعة")
@@ -616,6 +621,7 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
             
             event_app = st.dataframe(safe_display_df(df_approve_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
@@ -664,7 +670,11 @@ else:
                             app_unit_price = st.number_input("السعر الأفرادي", value=float(co["unit_price"]), min_value=0.0)
                             app_quantity = st.number_input("الكمية", value=int(co["quantity"]), min_value=1, step=1)
                         with c3:
-                            app_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"])
+                            # الحفاظ على معيار الأهمية المخزن وعدم تغييره تلقائياً
+                            curr_imp = str(co["importance_criteria"])
+                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                            app_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
                             app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         approver_notes = st.text_input("ملاحظات المعتمد")
@@ -730,6 +740,7 @@ else:
             })
             
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً)")
+            st.markdown("⚠️ **مفتاح تلوين التأخير (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             event_emg = st.dataframe(safe_display_df(df_emg_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
@@ -778,7 +789,11 @@ else:
                             emg_unit_price = st.number_input("السعر الأفرادي", value=float(co_emg["unit_price"]), min_value=0.0, key="emg_pr")
                             emg_quantity = st.number_input("الكمية", value=int(co_emg["quantity"]), min_value=1, step=1, key="emg_qu")
                         with c3:
-                            emg_importance = st.selectbox("معيار الأهمية", ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"], index=0, key="emg_im")
+                            # الحفاظ على معيار الأهمية وعدم تغييره
+                            curr_imp = str(co_emg["importance_criteria"])
+                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                            emg_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx, key="emg_im")
                             emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
                         
                         emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
@@ -902,7 +917,6 @@ else:
         df_all = st.session_state.db_purchases
         users_df = st.session_state.db_users
         
-        # الملاحظة 2: تصفية الداش بورد بناءً على صلاحيات المستشفى للمستخدم
         if "مدير النظام (Admin)" in st.session_state.user_roles:
             dash_hosp_filter = st.selectbox("تصفية لوحة التحكم حسب المستشفى:", ["جميع المستشفيات"] + HOSPITALS_LIST)
             if dash_hosp_filter != "جميع المستشفيات" and not df_all.empty:
@@ -919,22 +933,18 @@ else:
             
             total_orders = len(df_all)
             
-            # --- 1. إدارة تخطيط المستشفى ---
             hosp_pending = len(df_all[df_all['status'] == 'التخطيط بالمستشفى'])
             hosp_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالمستشفى'])
             hosp_approved = len(df_all[df_all['status'].isin(['التخطيط بالإمداد', 'لجنة الشراء الطارئ', 'معتمد', 'مرفوض من التخطيط بالإمداد', 'مرفوض من لجنة الشراء الطارئ'])])
 
-            # --- 2. إدارة تخطيط الإمداد ---
             supply_pending = len(df_all[df_all['status'] == 'التخطيط بالإمداد'])
             supply_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالإمداد'])
             supply_approved = len(df_all[df_all['status'].isin(['لجنة الشراء الطارئ', 'معتمد', 'مرفوض من لجنة الشراء الطارئ'])])
 
-            # --- 3. لجنة الشراء الطارئ ---
             emg_pending = len(df_all[df_all['status'] == 'لجنة الشراء الطارئ'])
             emg_rejected = len(df_all[df_all['status'] == 'مرفوض من لجنة الشراء الطارئ'])
             emg_approved = len(df_all[df_all['status'] == 'معتمد'])
 
-            # --- 4. التكلفة الإجمالية في لجنة الشراء الطارئ المعتمدة ---
             df_emg_approved_total = df_all[df_all['status'] == 'معتمد']
             emg_approved_cost = df_emg_approved_total['total_cost'].sum() if not df_emg_approved_total.empty else 0.0
 
@@ -993,9 +1003,8 @@ else:
             dc3.metric("معدل تأخير (شاشة لجنة الشراء الطارئ)", f"{avg_delay_s4:.1f} يوم")
             
             st.markdown("---")
-            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى: مجموع الطلبات المرفوعة ومعتمدة/مرفوضة للمراحل)")
+            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى)")
             
-            # --- الملاحظة 3: تجهيز شارت عمودين لكل مستشفى ---
             chart_data_list = []
             target_hospitals_for_chart = HOSPITALS_LIST if "مدير النظام (Admin)" in st.session_state.user_roles else [st.session_state.user_hospital]
             
@@ -1038,7 +1047,6 @@ else:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             
-            # الملاحظة 2: تقييد البحث الشامل بناءً على صلاحيات مستشفى المستخدم
             if "مدير النظام (Admin)" in st.session_state.user_roles:
                 hosp_filter = st.selectbox("تصفية حسب المستشفى:", ["الكل"] + HOSPITALS_LIST)
             else:
