@@ -406,7 +406,7 @@ else:
 
         st.markdown("---")
         
-        # نموذج تقديم الطلب مع التفريغ التلقائي الشامل عبر clear_on_submit=True
+        # نموذج تقديم الطلب مع تفريغ الحقول وسرعة عالية في الإرسال
         with st.form("purchase_request_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -440,17 +440,18 @@ else:
                         "reviewer_notes": "", "approver_notes": "", "edit_history": ""
                     }
                     
+                    # حفظ الصف في الذاكرة المحلية والارسال المباشر للسحابة بدون تعطيل الواجهة
                     ws_purchases = get_worksheet("purchases")
                     ws_purchases.append_row(list(new_row.values()))
                     
-                    # إعادة ضبط متغيرات الاختيار لتفريغ حقول القيم المجلوبة
+                    st.session_state.db_purchases = pd.concat([st.session_state.db_purchases, pd.DataFrame([new_row])], ignore_index=True)
+                    
+                    # إعادة ضبط بيانات الإدراج
                     st.session_state.selected_item_num = ""
                     st.session_state.selected_nupco = ""
                     st.session_state.selected_name = ""
                     
-                    load_data_to_session()
-                    st.success("✅ تم إرسال طلب الشراء وتفريغ كافة الحقول بنجاح!")
-                    st.rerun()
+                    st.success("✅ تم إرسال طلب الشراء وتفريغ كافة الحقول بنجاح! (يمكنك التحديث لاحقاً من الشريط الجانبي عند الحاجة)")
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -529,85 +530,85 @@ else:
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
-                req_id = int(target_df_view.iloc[selected_rows[0]]["رقم الطلب"])
-                current_order_row = df_all_p[df_all_p["id"] == req_id]
-                if not current_order_row.empty:
-                    co = current_order_row.iloc[0]
-                    
-                    sel_item_num = str(co["item_number"]).strip()
-                    sel_nupco = str(co["nupco_number"]).strip()
-                    sel_name = str(co["item_name"]).strip()
-                    
-                    if not df_all_p.empty:
-                        similar_orders = df_all_p[
-                            (
-                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                            ) & 
-                            (df_all_p["id"] != req_id) &
-                            (df_all_p["status"].isin(["التخطيط بالإمداد", "مرفوض من التخطيط بالمستشفى"]))
-                        ]
-                    else:
-                        similar_orders = pd.DataFrame()
-                    
-                    if not similar_orders.empty:
-                        st.markdown("---")
-                        st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالمستشفى:**")
-                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
-                    
+                # الجلب الصارم لـ id المباشر من الصف المحدد بالجدول لمنع الاختلاف
+                selected_row_data = target_df.iloc[selected_rows[0]]
+                req_id = int(selected_row_data["id"])
+                co = selected_row_data
+                
+                sel_item_num = str(co["item_number"]).strip()
+                sel_nupco = str(co["nupco_number"]).strip()
+                sel_name = str(co["item_name"]).strip()
+                
+                if not df_all_p.empty:
+                    similar_orders = df_all_p[
+                        (
+                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                        ) & 
+                        (df_all_p["id"] != req_id) &
+                        (df_all_p["status"].isin(["التخطيط بالإمداد", "مرفوض من التخطيط بالمستشفى"]))
+                    ]
+                else:
+                    similar_orders = pd.DataFrame()
+                
+                if not similar_orders.empty:
                     st.markdown("---")
-                    st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
-                    with st.form(f"edit_review_form_{req_id}", clear_on_submit=False):
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            new_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
-                            new_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
-                            new_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
-                        with c2:
-                            new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
-                            saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
-                            new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
-                            saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
-                            new_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
-                        with c3:
-                            curr_imp = str(co["importance_criteria"])
-                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
-                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
-                            new_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
-                            new_reason = st.text_area("السبب", value=str(co["reason"] or ""))
+                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالمستشفى:**")
+                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
+                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+                
+                st.markdown("---")
+                st.subheader(f"⚙️ تعديل الطلب رقم: {req_id}")
+                with st.form(f"edit_review_form_{req_id}", clear_on_submit=False):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        new_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
+                        new_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
+                        new_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
+                    with c2:
+                        new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
+                        saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
+                        new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                        saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
+                        new_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
+                    with c3:
+                        curr_imp = str(co["importance_criteria"])
+                        imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                        imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                        new_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
+                        new_reason = st.text_area("السبب", value=str(co["reason"] or ""))
+                    
+                    review_notes = st.text_input("ملاحظات المراجعة")
+                    action = st.selectbox("قرار المراجعة", ["تحويل للإمداد", "رفض الطلب"])
+                    
+                    if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
+                        new_total = float(new_unit_price * new_quantity)
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        new_status = "التخطيط بالإمداد" if action == "تحويل للإمداد" else "مرفوض من التخطيط بالمستشفى"
                         
-                        review_notes = st.text_input("ملاحظات المراجعة")
-                        action = st.selectbox("قرار المراجعة", ["تحويل للإمداد", "رفض الطلب"])
-                        
-                        if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
-                            new_total = float(new_unit_price * new_quantity)
-                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            new_status = "التخطيط بالإمداد" if action == "تحويل للإمداد" else "مرفوض من التخطيط بالمستشفى"
-                            
-                            ws_p = get_worksheet("purchases")
-                            all_rows = ws_p.get_all_records()
-                            for idx, row in enumerate(all_rows, start=2):
-                                if int(row.get("id", 0)) == int(req_id):
-                                    ws_p.update_cell(idx, 4, str(new_item_number))
-                                    ws_p.update_cell(idx, 5, str(new_nupco_number))
-                                    ws_p.update_cell(idx, 6, str(new_e_market_code))
-                                    ws_p.update_cell(idx, 7, str(new_item_name))
-                                    ws_p.update_cell(idx, 8, float(new_unit_price))
-                                    ws_p.update_cell(idx, 9, int(new_quantity))
-                                    ws_p.update_cell(idx, 10, float(new_total))
-                                    ws_p.update_cell(idx, 11, str(new_importance))
-                                    ws_p.update_cell(idx, 12, str(new_reason))
-                                    ws_p.update_cell(idx, 13, str(new_status))
-                                    ws_p.update_cell(idx, 15, str(now_str))
-                                    ws_p.update_cell(idx, 17, str(review_notes))
-                                    break
-                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == req_id, "status"] = new_status
-                            st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
-                            st.rerun()
+                        ws_p = get_worksheet("purchases")
+                        all_rows = ws_p.get_all_records()
+                        for idx, row in enumerate(all_rows, start=2):
+                            if int(row.get("id", 0)) == int(req_id):
+                                ws_p.update_cell(idx, 4, str(new_item_number))
+                                ws_p.update_cell(idx, 5, str(new_nupco_number))
+                                ws_p.update_cell(idx, 6, str(new_e_market_code))
+                                ws_p.update_cell(idx, 7, str(new_item_name))
+                                ws_p.update_cell(idx, 8, float(new_unit_price))
+                                ws_p.update_cell(idx, 9, int(new_quantity))
+                                ws_p.update_cell(idx, 10, float(new_total))
+                                ws_p.update_cell(idx, 11, str(new_importance))
+                                ws_p.update_cell(idx, 12, str(new_reason))
+                                ws_p.update_cell(idx, 13, str(new_status))
+                                ws_p.update_cell(idx, 15, str(now_str))
+                                ws_p.update_cell(idx, 17, str(review_notes))
+                                break
+                        st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == req_id, "status"] = new_status
+                        st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
+                        st.rerun()
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
@@ -656,85 +657,84 @@ else:
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
-                app_req_id = int(df_approve_view.iloc[sel_rows_app[0]]["رقم الطلب"])
-                current_order_row = df_all_p[df_all_p["id"] == app_req_id]
-                if not current_order_row.empty:
-                    co = current_order_row.iloc[0]
-                    
-                    sel_item_num = str(co["item_number"]).strip()
-                    sel_nupco = str(co["nupco_number"]).strip()
-                    sel_name = str(co["item_name"]).strip()
-                    
-                    if not df_all_p.empty:
-                        similar_orders = df_all_p[
-                            (
-                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                            ) & 
-                            (df_all_p["id"] != app_req_id) &
-                            (df_all_p["status"].isin(["لجنة الشراء الطارئ", "معتمد", "مرفوض من التخطيط بالإمداد"]))
-                        ]
-                    else:
-                        similar_orders = pd.DataFrame()
-                    
-                    if not similar_orders.empty:
-                        st.markdown("---")
-                        st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالإمداد:**")
-                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
-                    
+                selected_app_row = df_approve.iloc[sel_rows_app[0]]
+                app_req_id = int(selected_app_row["id"])
+                co = selected_app_row
+                
+                sel_item_num = str(co["item_number"]).strip()
+                sel_nupco = str(co["nupco_number"]).strip()
+                sel_name = str(co["item_name"]).strip()
+                
+                if not df_all_p.empty:
+                    similar_orders = df_all_p[
+                        (
+                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                        ) & 
+                        (df_all_p["id"] != app_req_id) &
+                        (df_all_p["status"].isin(["لجنة الشراء الطارئ", "معتمد", "مرفوض من التخطيط بالإمداد"]))
+                    ]
+                else:
+                    similar_orders = pd.DataFrame()
+                
+                if not similar_orders.empty:
                     st.markdown("---")
-                    st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار رقم: {app_req_id}")
-                    with st.form(f"approval_action_form_{app_req_id}", clear_on_submit=False):
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            app_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
-                            app_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
-                            app_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
-                        with c2:
-                            app_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
-                            saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
-                            app_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
-                            saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
-                            app_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
-                        with c3:
-                            curr_imp = str(co["importance_criteria"])
-                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
-                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
-                            app_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
-                            app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
+                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في شاشة التخطيط بالإمداد:**")
+                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
+                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+                
+                st.markdown("---")
+                st.subheader(f"⚖️ تعديل الطلب واتخاذ القرار رقم: {app_req_id}")
+                with st.form(f"approval_action_form_{app_req_id}", clear_on_submit=False):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        app_item_number = st.text_input("رقم البند", value=str(co["item_number"]))
+                        app_nupco_number = st.text_input("رقم نوبكو", value=str(co["nupco_number"]))
+                        app_e_market_code = st.text_input("كود السوق", value=str(co["e_market_code"]))
+                    with c2:
+                        app_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
+                        saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
+                        app_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                        saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
+                        app_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
+                    with c3:
+                        curr_imp = str(co["importance_criteria"])
+                        imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                        imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                        app_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx)
+                        app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
+                    
+                    approver_notes = st.text_input("ملاحظات المعتمد")
+                    app_action = st.selectbox("قرار الاعتماد", ["تحويل إلى لجنة الشراء الطارئ", "رفض الطلب"])
+                    
+                    if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
+                        app_total = float(app_unit_price * app_quantity)
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        final_status = "لجنة الشراء الطارئ" if app_action == "تحويل إلى لجنة الشراء الطارئ" else "مرفوض من التخطيط بالإمداد"
                         
-                        approver_notes = st.text_input("ملاحظات المعتمد")
-                        app_action = st.selectbox("قرار الاعتماد", ["تحويل إلى لجنة الشراء الطارئ", "رفض الطلب"])
-                        
-                        if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
-                            app_total = float(app_unit_price * app_quantity)
-                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            final_status = "لجنة الشراء الطارئ" if app_action == "تحويل إلى لجنة الشراء الطارئ" else "مرفوض من التخطيط بالإمداد"
-                            
-                            ws_p = get_worksheet("purchases")
-                            all_rows = ws_p.get_all_records()
-                            for idx, row in enumerate(all_rows, start=2):
-                                if int(row.get("id", 0)) == int(app_req_id):
-                                    ws_p.update_cell(idx, 4, str(app_item_number))
-                                    ws_p.update_cell(idx, 5, str(app_nupco_number))
-                                    ws_p.update_cell(idx, 6, str(app_e_market_code))
-                                    ws_p.update_cell(idx, 7, str(app_item_name))
-                                    ws_p.update_cell(idx, 8, float(app_unit_price))
-                                    ws_p.update_cell(idx, 9, int(app_quantity))
-                                    ws_p.update_cell(idx, 10, float(app_total))
-                                    ws_p.update_cell(idx, 11, str(app_importance))
-                                    ws_p.update_cell(idx, 12, str(app_reason))
-                                    ws_p.update_cell(idx, 13, str(final_status))
-                                    ws_p.update_cell(idx, 16, str(now_str))
-                                    ws_p.update_cell(idx, 18, str(approver_notes))
-                                    break
-                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == app_req_id, "status"] = final_status
-                            st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
-                            st.rerun()
+                        ws_p = get_worksheet("purchases")
+                        all_rows = ws_p.get_all_records()
+                        for idx, row in enumerate(all_rows, start=2):
+                            if int(row.get("id", 0)) == int(app_req_id):
+                                ws_p.update_cell(idx, 4, str(app_item_number))
+                                ws_p.update_cell(idx, 5, str(app_nupco_number))
+                                ws_p.update_cell(idx, 6, str(app_e_market_code))
+                                ws_p.update_cell(idx, 7, str(app_item_name))
+                                ws_p.update_cell(idx, 8, float(app_unit_price))
+                                ws_p.update_cell(idx, 9, int(app_quantity))
+                                ws_p.update_cell(idx, 10, float(app_total))
+                                ws_p.update_cell(idx, 11, str(app_importance))
+                                ws_p.update_cell(idx, 12, str(app_reason))
+                                ws_p.update_cell(idx, 13, str(final_status))
+                                ws_p.update_cell(idx, 16, str(now_str))
+                                ws_p.update_cell(idx, 18, str(approver_notes))
+                                break
+                        st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == app_req_id, "status"] = final_status
+                        st.success("✅ تم تحديث الطلب ونقله للمرحلة التالية بنجاح!")
+                        st.rerun()
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد في ({selected_app_filter}).")
 
@@ -784,85 +784,84 @@ else:
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
-                emg_req_id = int(df_emg_view.iloc[sel_rows_emg[0]]["رقم الطلب"])
-                current_emg_row = df_all_p[df_all_p["id"] == emg_req_id]
-                if not current_emg_row.empty:
-                    co_emg = current_emg_row.iloc[0]
-                    
-                    sel_item_num = str(co_emg["item_number"]).strip()
-                    sel_nupco = str(co_emg["nupco_number"]).strip()
-                    sel_name = str(co_emg["item_name"]).strip()
-                    
-                    if not df_all_p.empty:
-                        similar_orders = df_all_p[
-                            (
-                                ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
-                                ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
-                                ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
-                            ) & 
-                            (df_all_p["id"] != emg_req_id) &
-                            (df_all_p["status"].isin(["معتمد", "مرفوض من لجنة الشراء الطارئ"]))
-                        ]
-                    else:
-                        similar_orders = pd.DataFrame()
+                selected_emg_row = df_emergency.iloc[sel_rows_emg[0]]
+                emg_req_id = int(selected_emg_row["id"])
+                co_emg = selected_emg_row
+                
+                sel_item_num = str(co_emg["item_number"]).strip()
+                sel_nupco = str(co_emg["nupco_number"]).strip()
+                sel_name = str(co_emg["item_name"]).strip()
+                
+                if not df_all_p.empty:
+                    similar_orders = df_all_p[
+                        (
+                            ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
+                            ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
+                            ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
+                        ) & 
+                        (df_all_p["id"] != emg_req_id) &
+                        (df_all_p["status"].isin(["معتمد", "مرفوض من لجنة الشراء الطارئ"]))
+                    ]
+                else:
+                    similar_orders = pd.DataFrame()
 
-                    if not similar_orders.empty:
-                        st.markdown("---")
-                        st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في لجنة الشراء الطارئ:**")
-                        similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
-                        similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
-                        sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
-                        st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
-
+                if not similar_orders.empty:
                     st.markdown("---")
-                    st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
-                    with st.form(f"emergency_action_form_{emg_req_id}", clear_on_submit=False):
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            emg_item_number = st.text_input("رقم البند", value=str(co_emg["item_number"]), key="emg_in")
-                            emg_nupco_number = st.text_input("رقم نوبكو", value=str(co_emg["nupco_number"]), key="emg_nu")
-                            emg_e_market_code = st.text_input("كود السوق", value=str(co_emg["e_market_code"]), key="emg_em")
-                        with c2:
-                            emg_item_name = st.text_input("اسم الصنف", value=str(co_emg["item_name"]), key="emg_na")
-                            saved_unit_price = float(co_emg["unit_price"]) if not pd.isna(co_emg["unit_price"]) else 0.0
-                            emg_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="emg_pr")
-                            saved_qty = int(co_emg["quantity"]) if not pd.isna(co_emg["quantity"]) else 1
-                            emg_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="emg_qu")
-                        with c3:
-                            curr_imp = str(co_emg["importance_criteria"])
-                            imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
-                            imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
-                            emg_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx, key="emg_im")
-                            emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
+                    st.info(f"📌 **سجل القرارات السابقة (المعتمدة/المرفوضة) لنفس الصنف في لجنة الشراء الطارئ:**")
+                    similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
+                    similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
+                    sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
+                    st.dataframe(safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), use_container_width=True)
+
+                st.markdown("---")
+                st.subheader(f"⚖️ تعديل ومعالجة طلب الطوارئ رقم: {emg_req_id}")
+                with st.form(f"emergency_action_form_{emg_req_id}", clear_on_submit=False):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        emg_item_number = st.text_input("رقم البند", value=str(co_emg["item_number"]), key="emg_in")
+                        emg_nupco_number = st.text_input("رقم نوبكو", value=str(co_emg["nupco_number"]), key="emg_nu")
+                        emg_e_market_code = st.text_input("كود السوق", value=str(co_emg["e_market_code"]), key="emg_em")
+                    with c2:
+                        emg_item_name = st.text_input("اسم الصنف", value=str(co_emg["item_name"]), key="emg_na")
+                        saved_unit_price = float(co_emg["unit_price"]) if not pd.isna(co_emg["unit_price"]) else 0.0
+                        emg_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="emg_pr")
+                        saved_qty = int(co_emg["quantity"]) if not pd.isna(co_emg["quantity"]) else 1
+                        emg_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="emg_qu")
+                    with c3:
+                        curr_imp = str(co_emg["importance_criteria"])
+                        imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                        imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                        emg_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx, key="emg_im")
+                        emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
+                    
+                    emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
+                    emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد", "رفض"], key="emg_ac")
+                    
+                    if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
+                        emg_total = float(emg_unit_price * emg_quantity)
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        emg_final_status = "معتمد" if emg_action == "اعتماد" else "مرفوض من لجنة الشراء الطارئ"
                         
-                        emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
-                        emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد", "رفض"], key="emg_ac")
-                        
-                        if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
-                            emg_total = float(emg_unit_price * emg_quantity)
-                            now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            emg_final_status = "معتمد" if emg_action == "اعتماد" else "مرفوض من لجنة الشراء الطارئ"
-                            
-                            ws_p = get_worksheet("purchases")
-                            all_rows = ws_p.get_all_records()
-                            for idx, row in enumerate(all_rows, start=2):
-                                if int(row.get("id", 0)) == int(emg_req_id):
-                                    ws_p.update_cell(idx, 4, str(emg_item_number))
-                                    ws_p.update_cell(idx, 5, str(emg_nupco_number))
-                                    ws_p.update_cell(idx, 6, str(emg_e_market_code))
-                                    ws_p.update_cell(idx, 7, str(emg_item_name))
-                                    ws_p.update_cell(idx, 8, float(emg_unit_price))
-                                    ws_p.update_cell(idx, 9, int(emg_quantity))
-                                    ws_p.update_cell(idx, 10, float(emg_total))
-                                    ws_p.update_cell(idx, 11, str(emg_importance))
-                                    ws_p.update_cell(idx, 12, str(emg_reason))
-                                    ws_p.update_cell(idx, 13, str(emg_final_status))
-                                    ws_p.update_cell(idx, 16, str(now_str))
-                                    ws_p.update_cell(idx, 18, str(emg_notes))
-                                    break
-                            st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == emg_req_id, "status"] = emg_final_status
-                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
-                            st.rerun()
+                        ws_p = get_worksheet("purchases")
+                        all_rows = ws_p.get_all_records()
+                        for idx, row in enumerate(all_rows, start=2):
+                            if int(row.get("id", 0)) == int(emg_req_id):
+                                ws_p.update_cell(idx, 4, str(emg_item_number))
+                                ws_p.update_cell(idx, 5, str(emg_nupco_number))
+                                ws_p.update_cell(idx, 6, str(emg_e_market_code))
+                                ws_p.update_cell(idx, 7, str(emg_item_name))
+                                ws_p.update_cell(idx, 8, float(emg_unit_price))
+                                ws_p.update_cell(idx, 9, int(emg_quantity))
+                                ws_p.update_cell(idx, 10, float(emg_total))
+                                ws_p.update_cell(idx, 11, str(emg_importance))
+                                ws_p.update_cell(idx, 12, str(emg_reason))
+                                ws_p.update_cell(idx, 13, str(emg_final_status))
+                                ws_p.update_cell(idx, 16, str(now_str))
+                                ws_p.update_cell(idx, 18, str(emg_notes))
+                                break
+                        st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == emg_req_id, "status"] = emg_final_status
+                        st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
+                        st.rerun()
         else:
             st.info(f"لا توجد طلبات طارئة بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
 
@@ -1173,9 +1172,8 @@ else:
                         
                         ws_c = get_worksheet("complaints")
                         ws_c.append_row(list(new_c_row.values()))
-                        load_data_to_session()
+                        st.session_state.db_complaints = pd.concat([st.session_state.db_complaints, pd.DataFrame([new_c_row])], ignore_index=True)
                         st.success("✅ تم إرسال مشاركتك وتفريغ الحقول بنجاح!")
-                        st.rerun()
 
         with tab_view:
             st.subheader("📋 سجل الشكاوى والاقتراحات المسجلة")
@@ -1213,8 +1211,8 @@ else:
                                     ws_c.update_cell(idx, 7, "تم الرد")
                                     ws_c.update_cell(idx, 8, str(admin_reply_text))
                                     break
-                            load_data_to_session()
+                            st.session_state.db_complaints.loc[st.session_state.db_complaints["id"] == selected_c_id, "status"] = "تم الرد"
+                            st.session_state.db_complaints.loc[st.session_state.db_complaints["id"] == selected_c_id, "admin_reply"] = str(admin_reply_text)
                             st.success("✅ تم حفظ الرد وتحديث البيانات بنجاح!")
-                            st.rerun()
             else:
                 st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
