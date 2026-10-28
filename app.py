@@ -183,7 +183,7 @@ def to_excel_bytes(df):
     return df.to_html(index=False).encode('utf-8-sig')
 
 def safe_display_df(df):
-    """دالة تحويل الأعمدة لنصوص صريحة لمنع أخطاء pyarrow وتحسين سرعة الأداء"""
+    """تنسيق آمن للأعمدة لضمان ظهور الأسعار والأرقام بدون أخطاء pyarrow"""
     if df.empty:
         return df
     safe_df = df.copy()
@@ -249,8 +249,7 @@ if not st.session_state.logged_in:
                     else:
                         ws_users = get_worksheet("users")
                         ws_users.append_row([new_user, make_hashes(new_pass), ",".join(requested_roles), "قيد الانتظار", selected_hospital])
-                        load_data_to_session()
-                        st.success("✅ تم إرسال طلبك بنجاح!")
+                        st.success("✅ تم إرسال طلبك بنجاح! (سيتم تفعيل الحساب بعد التحديث اليدوي للأدمن)")
                 else:
                     st.warning("الرجاء تعبئة جميع الحقول واختيار المستشفى والصلاحية.")
 
@@ -278,8 +277,7 @@ if not st.session_state.logged_in:
                     if cell:
                         ws_users.update_cell(cell.row, 2, make_hashes(f_new_pass1))
                         ws_users.update_cell(cell.row, 4, "قيد إعادة تعيين كلمة المرور")
-                        load_data_to_session()
-                        st.success("✅ تم إرسال طلب إعادة تعيين كلمة المرور بنجاح! يرجى التواصل مع مدير النظام (الأدمن) للموافقة واعتماد الطلب.")
+                        st.success("✅ تم إرسال طلب إعادة تعيين كلمة المرور بنجاح!")
 
 # ==================== الواجهة الرئيسية ====================
 else:
@@ -316,7 +314,6 @@ else:
                     cell = ws_users.find(st.session_state.username)
                     if cell:
                         ws_users.update_cell(cell.row, 2, make_hashes(new_pass1))
-                        load_data_to_session()
                         st.success("✅ تم تغيير كلمة المرور بنجاح!")
 
     if st.sidebar.button("تسجيل الخروج"):
@@ -415,7 +412,7 @@ else:
                     new_row = {
                         "id": new_id, "requester": st.session_state.username, "hospital": st.session_state.user_hospital,
                         "item_number": item_number_input.strip(), "nupco_number": nupco_number_input.strip(), "e_market_code": e_market_code.strip(),
-                        "item_name": item_name_input.strip(), "unit_price": unit_price, "quantity": quantity, "total_cost": unit_price * quantity,
+                        "item_name": item_name_input.strip(), "unit_price": float(unit_price), "quantity": int(quantity), "total_cost": float(unit_price * quantity),
                         "importance_criteria": importance_criteria, "reason": reason, "status": "التخطيط بالمستشفى",
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "reviewed_at": "", "approved_at": "",
                         "reviewer_notes": "", "approver_notes": "", "edit_history": ""
@@ -423,13 +420,11 @@ else:
                     
                     ws_purchases = get_worksheet("purchases")
                     ws_purchases.append_row(list(new_row.values()))
-                    load_data_to_session()
                     
                     st.session_state.form_item_number = ""
                     st.session_state.form_nupco_number = ""
                     st.session_state.form_item_name = ""
-                    st.success("✅ تم إرسال طلب الشراء بنجاح!")
-                    st.rerun()
+                    st.success("✅ تم إرسال طلب الشراء للسحابة بنجاح! (اضغط زر التحديث الجانبي لعرضه)")
 
         st.markdown("---")
         st.subheader("📋 سجل طلباتك السابقة")
@@ -497,9 +492,7 @@ else:
                                 if int(row.get("id", 0)) == int(remove_id):
                                     ws_p.delete_rows(idx)
                                     break
-                        load_data_to_session()
-                        st.success("تم الدمج بنجاح!")
-                        st.rerun()
+                        st.success("تم الدمج بنجاح! (قم بتحديث البيانات لعرض النتائج)")
 
             event = st.dataframe(safe_display_df(target_df_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
@@ -515,7 +508,6 @@ else:
                     sel_name = str(co["item_name"]).strip()
                     
                     if not df_all_p.empty:
-                        # الملاحظة 2: عرض الطلبات المتشابهة المعتمدة أو المرفوضة في هذه الشاشة
                         similar_orders = df_all_p[
                             (
                                 ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
@@ -554,7 +546,7 @@ else:
                         action = st.selectbox("قرار المراجعة", ["تحويل للإمداد", "رفض الطلب"])
                         
                         if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
-                            new_total = new_unit_price * new_quantity
+                            new_total = float(new_unit_price * new_quantity)
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                             new_status = "التخطيط بالإمداد" if action == "تحويل للإمداد" else "مرفوض من التخطيط بالمستشفى"
                             
@@ -575,9 +567,7 @@ else:
                                     ws_p.update_cell(idx, 15, str(now_str))
                                     ws_p.update_cell(idx, 17, str(review_notes))
                                     break
-                            load_data_to_session()
-                            st.success("تم التحديث بنجاح!")
-                            st.rerun()
+                            st.success("✅ تم تحديث الطلب بنجاح! (اضغط زر التحديث الجانبي لعرض التغييرات)")
         else:
             st.info(f"لا توجد طلبات معلقة للمراجعة في ({review_hospital}).")
 
@@ -629,7 +619,6 @@ else:
                     sel_name = str(co["item_name"]).strip()
                     
                     if not df_all_p.empty:
-                        # الملاحظة 2: عرض الطلبات المتشابهة المعتمدة أو المرفوضة في شاشة التخطيط بالإمداد
                         similar_orders = df_all_p[
                             (
                                 ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
@@ -665,11 +654,10 @@ else:
                             app_reason = st.text_area("السبب", value=str(co["reason"] or ""))
                         
                         approver_notes = st.text_input("ملاحظات المعتمد")
-                        # الملاحظة 3: قرار الاعتماد يكون: تحويل إلى لجنة الشراء الطارئ - رفض الطلب
                         app_action = st.selectbox("قرار الاعتماد", ["تحويل إلى لجنة الشراء الطارئ", "رفض الطلب"])
                         
                         if st.form_submit_button("حفظ التعديلات وتنفيذ القرار"):
-                            app_total = app_unit_price * app_quantity
+                            app_total = float(app_unit_price * app_quantity)
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                             final_status = "لجنة الشراء الطارئ" if app_action == "تحويل إلى لجنة الشراء الطارئ" else "مرفوض من التخطيط بالإمداد"
                             
@@ -690,9 +678,7 @@ else:
                                     ws_p.update_cell(idx, 16, str(now_str))
                                     ws_p.update_cell(idx, 18, str(approver_notes))
                                     break
-                            load_data_to_session()
-                            st.success("تم تحديث الطلب وتنفيذ القرار بنجاح!")
-                            st.rerun()
+                            st.success("✅ تم تحديث الطلب وتنفيذ القرار بنجاح! (قم بتحديث البيانات)")
         else:
             st.info(f"لا توجد طلبات بانتظار الاعتماد في ({selected_app_filter}).")
 
@@ -743,7 +729,6 @@ else:
                     sel_name = str(co_emg["item_name"]).strip()
                     
                     if not df_all_p.empty:
-                        # الملاحظة 2: عرض الطلبات المتشابهة المعتمدة أو المرفوضة في لجنة الشراء الطارئ
                         similar_orders = df_all_p[
                             (
                                 ((df_all_p["item_number"] == sel_item_num) & (sel_item_num != "")) |
@@ -779,11 +764,10 @@ else:
                             emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
                         
                         emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
-                        # الملاحظة 4: قرار اللجنة يكون: اعتماد - رفض
                         emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد", "رفض"], key="emg_ac")
                         
                         if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
-                            emg_total = emg_unit_price * emg_quantity
+                            emg_total = float(emg_unit_price * emg_quantity)
                             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                             emg_final_status = "معتمد" if emg_action == "اعتماد" else "مرفوض من لجنة الشراء الطارئ"
                             
@@ -804,9 +788,7 @@ else:
                                     ws_p.update_cell(idx, 16, str(now_str))
                                     ws_p.update_cell(idx, 18, str(emg_notes))
                                     break
-                            load_data_to_session()
-                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
-                            st.rerun()
+                            st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح! (قم بتحديث البيانات)")
         else:
             st.info(f"لا توجد طلبات طارئة بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
 
@@ -845,8 +827,7 @@ else:
                                     cell = ws_u.find(u_name)
                                     if cell:
                                         ws_u.delete_rows(cell.row)
-                                        load_data_to_session()
-                                        st.success(f"تم حذف المستخدم {u_name}")
+                                        st.success(f"تم حذف المستخدم {u_name} (قم بالتحديث)")
                                         st.rerun()
                         st.markdown("---")
                 
@@ -874,9 +855,7 @@ else:
                                 ws_u.update_cell(cell.row, 3, ",".join(updated_roles))
                                 ws_u.update_cell(cell.row, 4, str(updated_status))
                                 ws_u.update_cell(cell.row, 5, str(updated_hosp))
-                                load_data_to_session()
-                                st.success("تم تحديث المستخدم والموافقة عليه بنجاح!")
-                                st.rerun()
+                                st.success("تم تحديث المستخدم والموافقة عليه بنجاح! (قم بتحديث البيانات)")
 
             with tab2:
                 with st.form("add_new_user_form"):
@@ -897,9 +876,7 @@ else:
                             else:
                                 ws_u = get_worksheet("users")
                                 ws_u.append_row([new_u_name, make_hashes(new_u_pass), ",".join(new_u_roles), "معتمد", new_u_hosp])
-                                load_data_to_session()
-                                st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح!")
-                                st.rerun()
+                                st.success(f"تمت إضافة المستخدم {new_u_name} واعتماده بنجاح! (قم بالتحديث)")
 
     # ==================== الشاشة السادسة (Dashboard التفصيلية) ====================
     elif selected_screen == "الشاشة 6: لوحة التحكّم التفصيلية (Dashboard)":
@@ -915,33 +892,29 @@ else:
         if not df_all.empty:
             total_orders = len(df_all)
             
-            # --- 1. إحصائيات إدارة تخطيط المستشفى ---
+            # --- 1. إدارة تخطيط المستشفى ---
             hosp_pending = len(df_all[df_all['status'] == 'التخطيط بالمستشفى'])
             hosp_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالمستشفى'])
-            # المعتمدة من تخطيط المستشفى هي التي انتقلت للمراحل التالية
             hosp_approved = len(df_all[df_all['status'].isin(['التخطيط بالإمداد', 'لجنة الشراء الطارئ', 'معتمد', 'مرفوض من التخطيط بالإمداد', 'مرفوض من لجنة الشراء الطارئ'])])
 
-            # --- 2. إحصائيات إدارة تخطيط الإمداد ---
+            # --- 2. إدارة تخطيط الإمداد ---
             supply_pending = len(df_all[df_all['status'] == 'التخطيط بالإمداد'])
             supply_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالإمداد'])
             supply_approved = len(df_all[df_all['status'].isin(['لجنة الشراء الطارئ', 'معتمد', 'مرفوض من لجنة الشراء الطارئ'])])
 
-            # --- 3. إحصائيات لجنة الشراء الطارئ ---
+            # --- 3. لجنة الشراء الطارئ ---
             emg_pending = len(df_all[df_all['status'] == 'لجنة الشراء الطارئ'])
             emg_rejected = len(df_all[df_all['status'] == 'مرفوض من لجنة الشراء الطارئ'])
             emg_approved = len(df_all[df_all['status'] == 'معتمد'])
 
-            # --- 4. التكلفة الإجمالية للطلبات المعتمدة في لجنة الشراء الطارئ ---
+            # --- 4. التكلفة الإجمالية في لجنة الشراء الطارئ المعتمدة ---
             df_emg_approved_total = df_all[df_all['status'] == 'معتمد']
             emg_approved_cost = df_emg_approved_total['total_cost'].sum() if not df_emg_approved_total.empty else 0.0
 
-            # العرض الأول: الطلبات الكلية
             st.metric("📦 إجمالي كافة الطلبات بالمستشفى / النظام", total_orders)
             st.markdown("---")
 
-            # العرض الثاني: تقسيم المراحل (المستشفى، الإمداد، الطوارئ)
             col_hosp, col_supply, col_emg = st.columns(3)
-            
             with col_hosp:
                 st.subheader("🏥 إدارة تخطيط المستشفى")
                 st.metric("الطلبات المعتمدة", hosp_approved)
@@ -993,16 +966,27 @@ else:
             dc3.metric("معدل تأخير (شاشة لجنة الشراء الطارئ)", f"{avg_delay_s4:.1f} يوم")
             
             st.markdown("---")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                st.subheader("🏥 توزيع الطلبات حسب المستشفى")
-                if 'hospital' in df_all.columns:
-                    st.bar_chart(df_all['hospital'].value_counts())
-            with col_d2:
-                st.subheader("📌 تباين حالات الطلبات في النظام")
-                if 'status' in df_all.columns:
-                    st.bar_chart(df_all['status'].value_counts())
+            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى: الإجمالي مقابل تفاصيل المراحل)")
             
+            # --- الملاحظة 3: تجهيز شارت عمودين لكل مستشفى (الإجمالي والمراحل) ---
+            chart_data_list = []
+            for hosp in HOSPITALS_LIST:
+                h_df = df_all[df_all['hospital'] == hosp]
+                tot_req = len(h_df)
+                h_app = len(h_df[h_df['status'] == 'معتمد'])
+                h_rej = len(h_df[h_df['status'].str.contains('مرفوض', na=False)])
+                h_pen = tot_req - (h_app + h_rej)
+                
+                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "مجموع الطلبات المرفوعة", "العدد": tot_req})
+                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات معتمدة", "العدد": h_app})
+                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات مرفوضة", "العدد": h_rej})
+                chart_data_list.append({"المستشفى": hosp, "نوع المؤشر": "طلبات معلقة", "العدد": h_pen})
+            
+            df_chart = pd.DataFrame(chart_data_list)
+            if not df_chart.empty:
+                pivot_chart = df_chart.pivot(index="المستشفى", columns="نوع المؤشر", values="العدد").fillna(0)
+                st.bar_chart(pivot_chart)
+
             st.markdown("---")
             st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
             df_app_dash = df_all[df_all['status'] == 'معتمد']
@@ -1106,9 +1090,7 @@ else:
                         
                         ws_c = get_worksheet("complaints")
                         ws_c.append_row(list(new_c_row.values()))
-                        load_data_to_session()
-                        st.success("✅ تم إرسال مشاركتك بنجاح وشكراً لتواصلك!")
-                        st.rerun()
+                        st.success("✅ تم إرسال مشاركتك بنجاح! (قم بالتحديث لعرضها)")
 
         with tab_view:
             st.subheader("📋 سجل الشكاوى والاقتراحات المسجلة")
@@ -1136,7 +1118,6 @@ else:
                     st.write(f"**المستخدم:** {selected_c_row['username']} ({selected_c_row['hospital']})")
                     st.write(f"**المحتوى:** {selected_c_row['content']}")
                     
-                    # الملاحظة 5: مسح الخانات بعد الرد (clear_on_submit=True)
                     with st.form("admin_reply_form", clear_on_submit=True):
                         admin_reply_text = st.text_area("أدخل الرد الخاص بالإدارة:", value=str(selected_c_row.get("admin_reply") or ""))
                         if st.form_submit_button("حفظ الرد وتحديث الحالة إلى 'تم الرد'"):
@@ -1147,8 +1128,6 @@ else:
                                     ws_c.update_cell(idx, 7, "تم الرد")
                                     ws_c.update_cell(idx, 8, str(admin_reply_text))
                                     break
-                            load_data_to_session()
-                            st.success("✅ تم حفظ الرد ومسح النموذج بنجاح!")
-                            st.rerun()
+                            st.success("✅ تم حفظ الرد ومسح النموذج بنجاح! (قم بالتحديث)")
             else:
                 st.info("لا توجد شكاوى أو اقتراحات مسجلة.")
