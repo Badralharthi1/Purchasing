@@ -536,7 +536,7 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
-                # إظهار كافة الطلبات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف في هذه الشاشة
+                # إظهار الطلبات المعتمدة نهائياً فقط (واستبعاد المعلقة، غير المعتمدة، والمرفوضة) في سجل الطلبات السابقة
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -544,14 +544,15 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != req_id)
+                        (df_all_p["id"] != req_id) &
+                        (df_all_p["status"] == "معتمد")
                     ]
                 else:
                     similar_orders = pd.DataFrame()
                 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
+                    st.info(f"📌 **سجل الطلبات المعتمدة نهائياً السابقة لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
@@ -662,7 +663,7 @@ else:
                 sel_nupco = str(co["nupco_number"]).strip()
                 sel_name = str(co["item_name"]).strip()
                 
-                # إظهار كافة الطلبات السابقة (المعتمدة، المرفوضة، المعلقة) في شاشة الإمداد
+                # إظهار الطلبات المعتمدة نهائياً فقط في شاشة الإمداد
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -670,14 +671,15 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != app_req_id)
+                        (df_all_p["id"] != app_req_id) &
+                        (df_all_p["status"] == "معتمد")
                     ]
                 else:
                     similar_orders = pd.DataFrame()
                 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
+                    st.info(f"📌 **سجل الطلبات المعتمدة نهائياً السابقة لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
@@ -788,7 +790,7 @@ else:
                 sel_nupco = str(co_emg["nupco_number"]).strip()
                 sel_name = str(co_emg["item_name"]).strip()
                 
-                # إظهار كافة الطلبات السابقة في لجنة الطوارئ
+                # إظهار الطلبات المعتمدة نهائياً فقط في لجنة الطوارئ
                 if not df_all_p.empty:
                     similar_orders = df_all_p[
                         (
@@ -796,14 +798,15 @@ else:
                             ((df_all_p["nupco_number"] == sel_nupco) & (sel_nupco != "")) |
                             ((df_all_p["item_name"] == sel_name) & (sel_name != ""))
                         ) & 
-                        (df_all_p["id"] != emg_req_id)
+                        (df_all_p["id"] != emg_req_id) &
+                        (df_all_p["status"] == "معتمد")
                     ]
                 else:
                     similar_orders = pd.DataFrame()
 
                 if not similar_orders.empty:
                     st.markdown("---")
-                    st.info(f"📌 **سجل الطلبات والقرارات السابقة (المعتمدة، المرفوضة، المعلقة) لنفس الصنف:**")
+                    st.info(f"📌 **سجل الطلبات المعتمدة نهائياً السابقة لنفس الصنف:**")
                     similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
                     similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
                     sim_view = similar_orders.rename(columns={"id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"})
