@@ -453,7 +453,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
