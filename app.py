@@ -221,10 +221,10 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة البحث الموحدة لعرض الطلبات المشابهة برقم نوبكو أو رقم البند بناءً على الشاشة ---
-def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num, screen_level):
+# --- دالة عرض الطلبات المشابهة التي مرت على نفس الشاشة (معتمدة، مرفوضة، أو معلقة فيها) برقم نوبكو أو رقم البند ---
+def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_number, screen_level):
     sel_item = clean_code_val(item_num)
-    sel_nupco = clean_code_val(nupco_num)
+    sel_nupco = clean_code_val(nupco_number)
     
     if df_all_p.empty or (not sel_item and not sel_nupco):
         return
@@ -232,30 +232,46 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     df_others = df_all_p[df_all_p["id"].astype(int) != int(current_req_id)].copy()
     if df_others.empty:
         return
-        
-    # استبعاد الطلبات المرفوضة تماماً
-    df_others = df_others[~df_others["status"].astype(str).str.contains("مرفوض", na=False)]
-    if df_others.empty:
-        return
 
-    # فلترة الطلبات بناءً على وصولها للشاشة الحالية أو تجاوزها
+    # تحديد الطلبات التي "مرت" على الشاشة الحالية حصراً (سواء علقت فيها، أو تم اعتمادها وانتقلت، أو رُفِضت فيها)
     if screen_level == 2:
-        allowed_statuses = ["التخطيط بالمستشفى"]
+        # الشاشة 2 (المستشفى): الطلبات التي حالتها (التخطيط بالمستشفى، مرفوض من التخطيط بالمستشفى) أو تجاوزتها للإمداد/الطوارئ/معتمد
+        valid_statuses = [
+            "التخطيط بالمستشفى", 
+            "مرفوض من التخطيط بالمستشفى", 
+            "التخطيط بالإمداد", 
+            "مرفوض من التخطيط بالإمداد", 
+            "لجنة الشراء الطارئ", 
+            "مرفوض من لجنة الشراء الطارئ", 
+            "معتمد"
+        ]
     elif screen_level == 3:
-        allowed_statuses = ["التخطيط بالإمداد", "لجنة الشراء الطارئ", "معتمد"]
+        # الشاشة 3 (الإمداد): الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، مرفوض من الإمداد، لجنة الطوارئ، معتمد)
+        valid_statuses = [
+            "التخطيط بالإمداد", 
+            "مرفوض من التخطيط بالإمداد", 
+            "لجنة الشراء الطارئ", 
+            "مرفوض من لجنة الشراء الطارئ", 
+            "معتمد"
+        ]
     elif screen_level == 4:
-        allowed_statuses = ["لجنة الشراء الطارئ", "معتمد"]
+        # الشاشة 4 (لجنة الطوارئ): الطلبات التي وصلت للجنة الطوارئ فما فوق (لجنة الشراء الطارئ، مرفوض من الطوارئ، معتمد)
+        valid_statuses = [
+            "لجنة الشراء الطارئ", 
+            "مرفوض من لجنة الشراء الطارئ", 
+            "معتمد"
+        ]
     else:
-        allowed_statuses = []
+        valid_statuses = []
 
-    df_others = df_others[df_others["status"].isin(allowed_statuses)]
+    df_others = df_others[df_others["status"].isin(valid_statuses)]
     if df_others.empty:
         return
 
     df_others["clean_item_num"] = df_others["item_number"].apply(clean_code_val)
     df_others["clean_nupco_num"] = df_others["nupco_number"].apply(clean_code_val)
     
-    # شرط التشابه: مطابقة رقم البند أو رقم نوبكو
+    # مطابقة التشابه بناءً على رقم البند أو رقم نوبكو
     cond_item = (df_others["clean_item_num"] == sel_item) & (sel_item != "")
     cond_nupco = (df_others["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
     
@@ -263,7 +279,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     
     if not similar_orders.empty:
         st.markdown("---")
-        st.info("📌 **الطلبات السابقة المشابهة النشطة (برقم نوبكو أو رقم البند):**")
+        st.info(f"📌 **الطلبات السابقة التي مرت على هذه الشاشة (معتمدة، مرفوضة، أو معلقة) لنفس (رقم البند أو رقم نوبكو):**")
         similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
         similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
         
@@ -549,6 +565,7 @@ else:
         if not df_all_p.empty:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
+            # الشاشة الثانية تعرض حصراً الطلبات التي في حالة "التخطيط بالمستشفى" ولم تنتقل بعد
             df_review = df_all_p[(df_all_p["status"] == 'التخطيط بالمستشفى') & (df_all_p["hospital"] == review_hospital)]
         else:
             df_review = pd.DataFrame()
@@ -602,7 +619,7 @@ else:
                 req_id = int(selected_row_data["id"])
                 co = selected_row_data
                 
-                # استدعاء الدالة للشاشة الثانية (مستوى 2)
+                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الثانية (مستوى 2)
                 render_similar_orders_section(df_all_p, req_id, co["item_number"], co["nupco_number"], screen_level=2)
                 
                 st.markdown("---")
@@ -683,6 +700,7 @@ else:
             st.markdown("---")
 
         if not df_all_p.empty:
+            # الشاشة الثالثة تعرض فقط الطلبات التي تم تحويلها من الشاشة السابقة وحالتها "التخطيط بالإمداد"
             df_approve = df_all_p[df_all_p["status"] == 'التخطيط بالإمداد']
             if selected_app_filter != "جميع المستشفيات":
                 df_approve = df_approve[df_approve["hospital"] == selected_app_filter]
@@ -706,7 +724,7 @@ else:
                 app_req_id = int(selected_app_row["id"])
                 co = selected_app_row
                 
-                # استدعاء الدالة للشاشة الثالثة (مستوى 3)
+                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الثالثة (مستوى 3)
                 render_similar_orders_section(df_all_p, app_req_id, co["item_number"], co["nupco_number"], screen_level=3)
                 
                 st.markdown("---")
@@ -787,6 +805,7 @@ else:
                 )
                 st.markdown("---")
 
+            # الشاشة الرابعة تعرض فقط الطلبات التي تم تحويلها من الإمداد وحالتها "لجنة الشراء الطارئ"
             df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
@@ -810,7 +829,7 @@ else:
                 emg_req_id = int(selected_emg_row["id"])
                 co_emg = selected_emg_row
                 
-                # استدعاء الدالة للشاشة الرابعة (مستوى 4)
+                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الرابعة (مستوى 4)
                 render_similar_orders_section(df_all_p, emg_req_id, co_emg["item_number"], co_emg["nupco_number"], screen_level=4)
 
                 st.markdown("---")
