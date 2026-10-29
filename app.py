@@ -221,7 +221,7 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة البحث الموحدة لعرض الطلبات المشابهة التي وصلت للشاشة الحالية أو تجاوزتها فقط ---
+# --- دالة البحث الموحدة لعرض الطلبات المشابهة (باستبعاد الطلبات المرفوضة تماماً والطلبات التي لم تصل للشاشة الحالية) ---
 def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num, screen_level):
     sel_item = clean_code_val(item_num)
     sel_nupco = clean_code_val(nupco_num)
@@ -233,27 +233,26 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     if df_others.empty:
         return
         
-    # تحديد الحالات المسموح ظهورها بناءً على الشاشة الحالية (لكي لا تظهر طلبات الشاشات السابقة التي لم تصل بعد)
+    # استبعاد أي طلب مرفوض تماماً من الظهور في قائمة المشابهة
+    df_others = df_others[~df_others["status"].str.contains("مرفوض", na=False)]
+    if df_others.empty:
+        return
+
+    # فلترة الطلبات بناءً على وصولها للشاشة الحالية أو تجاوزها (مع استبعاد الطلبات التي لم تصل بعد للشاشة الحالية)
     if screen_level == 2:
-        # الشاشة الثانية (التخطيط بالمستشفى): تظهر الطلبات المعلقة في التخطيط بالمستشفى أو المرفوضة منها
-        allowed_statuses = ["التخطيط بالمستشفى", "مرفوض من التخطيط بالمستشفى"]
+        # الشاشة الثانية: تظهر الطلبات المعلقة في التخطيط بالمستشفى حصراً
+        allowed_statuses = ["التخطيط بالمستشفى"]
     elif screen_level == 3:
-        # الشاشة الثالثة (التخطيط بالإمداد): تظهر الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، لجنة الشراء الطارئ، معتمد، ومرفوضات الإمداد/الطوارئ)
+        # الشاشة الثالثة: تظهر الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، لجنة الشراء الطارئ، معتمد)
         allowed_statuses = [
             "التخطيط بالإمداد", 
-            "مرفوض من التخطيط بالمستشفى", 
-            "مرفوض من التخطيط بالإمداد", 
             "لجنة الشراء الطارئ", 
-            "مرفوض من لجنة الشراء الطارئ", 
             "معتمد"
         ]
     elif screen_level == 4:
-        # الشاشة الرابعة (لجنة الشراء الطارئ): تظهر الطلبات التي وصلت للجنة الطوارئ فما فوق
+        # الشاشة الرابعة: تظهر الطلبات التي وصلت للجنة الطوارئ فما فوق (لجنة الشراء الطارئ، معتمد)
         allowed_statuses = [
             "لجنة الشراء الطارئ", 
-            "مرفوض من التخطيط بالمستشفى", 
-            "مرفوض من التخطيط بالإمداد", 
-            "مرفوض من لجنة الشراء الطارئ", 
             "معتمد"
         ]
     else:
@@ -273,7 +272,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     
     if not similar_orders.empty:
         st.markdown("---")
-        st.info("📌 **الطلبات السابقة المشابهة التي وصلت لهذه الشاشة أو تجاوزتها (معتمدة، مرفوضة، أو معلقة) لنفس (رقم البند أو رقم نوبكو):**")
+        st.info("📌 **الطلبات السابقة المشابهة النشطة (التي وصلت لهذه الشاشة أو تجاوزتها وغير مرفوضة) لنفس (رقم البند أو رقم نوبكو):**")
         similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
         similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
         
@@ -453,7 +452,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
