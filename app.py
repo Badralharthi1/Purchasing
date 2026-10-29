@@ -221,7 +221,7 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة البحث الموحدة لعرض الطلبات المشابهة (باستبعاد الطلبات المرفوضة تماماً والطلبات التي لم تصل للشاشة الحالية) ---
+# --- دالة البحث الموحدة لعرض الطلبات المشابهة برقم نوبكو أو رقم البند بناءً على الشاشة ---
 def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num, screen_level):
     sel_item = clean_code_val(item_num)
     sel_nupco = clean_code_val(nupco_num)
@@ -233,28 +233,18 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     if df_others.empty:
         return
         
-    # استبعاد أي طلب مرفوض تماماً من الظهور في قائمة المشابهة
-    df_others = df_others[~df_others["status"].str.contains("مرفوض", na=False)]
+    # استبعاد الطلبات المرفوضة تماماً
+    df_others = df_others[~df_others["status"].astype(str).str.contains("مرفوض", na=False)]
     if df_others.empty:
         return
 
-    # فلترة الطلبات بناءً على وصولها للشاشة الحالية أو تجاوزها (مع استبعاد الطلبات التي لم تصل بعد للشاشة الحالية)
+    # فلترة الطلبات بناءً على وصولها للشاشة الحالية أو تجاوزها
     if screen_level == 2:
-        # الشاشة الثانية: تظهر الطلبات المعلقة في التخطيط بالمستشفى حصراً
         allowed_statuses = ["التخطيط بالمستشفى"]
     elif screen_level == 3:
-        # الشاشة الثالثة: تظهر الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، لجنة الشراء الطارئ، معتمد)
-        allowed_statuses = [
-            "التخطيط بالإمداد", 
-            "لجنة الشراء الطارئ", 
-            "معتمد"
-        ]
+        allowed_statuses = ["التخطيط بالإمداد", "لجنة الشراء الطارئ", "معتمد"]
     elif screen_level == 4:
-        # الشاشة الرابعة: تظهر الطلبات التي وصلت للجنة الطوارئ فما فوق (لجنة الشراء الطارئ، معتمد)
-        allowed_statuses = [
-            "لجنة الشراء الطارئ", 
-            "معتمد"
-        ]
+        allowed_statuses = ["لجنة الشراء الطارئ", "معتمد"]
     else:
         allowed_statuses = []
 
@@ -265,6 +255,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     df_others["clean_item_num"] = df_others["item_number"].apply(clean_code_val)
     df_others["clean_nupco_num"] = df_others["nupco_number"].apply(clean_code_val)
     
+    # شرط التشابه: مطابقة رقم البند أو رقم نوبكو
     cond_item = (df_others["clean_item_num"] == sel_item) & (sel_item != "")
     cond_nupco = (df_others["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
     
@@ -272,7 +263,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_num,
     
     if not similar_orders.empty:
         st.markdown("---")
-        st.info("📌 **الطلبات السابقة المشابهة النشطة (التي وصلت لهذه الشاشة أو تجاوزتها وغير مرفوضة) لنفس (رقم البند أو رقم نوبكو):**")
+        st.info("📌 **الطلبات السابقة المشابهة النشطة (برقم نوبكو أو رقم البند):**")
         similar_orders["unit_price"] = pd.to_numeric(similar_orders["unit_price"], errors="coerce").fillna(0.0)
         similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
         
