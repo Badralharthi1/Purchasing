@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide")
 
 st.markdown("""
     <style>
