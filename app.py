@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide")
 
 st.markdown("""
     <style>
@@ -311,7 +311,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
 
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد", "نسيت كلمة المرور؟"], horizontal=True)
@@ -469,7 +469,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
