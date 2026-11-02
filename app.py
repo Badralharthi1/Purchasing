@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -221,7 +221,37 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة عرض الطلبات المشابهة التي مرت على نفس الشاشة (معتمدة، مرفوضة، أو معلقة فيها) برقم نوبكو أو رقم البند ---
+# --- دالة تلوين الصفوف حسب التأخير ---
+def style_delay_rows(df, screen_level=2):
+    if df.empty or 'تاريخ الإنشاء' not in df.columns:
+        return df
+
+    def highlight_row(row):
+        try:
+            created_dt = datetime.strptime(str(row['تاريخ الإنشاء']), "%Y-%m-%d %H:%M")
+            days_passed = (datetime.now() - created_dt).days
+        except Exception:
+            days_passed = 0
+
+        # شاشات المستشفى والإمداد (2 و 3)
+        if screen_level in [2, 3]:
+            if days_passed >= 3:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            elif days_passed >= 1:
+                return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
+        
+        # شاشة لجنة الشراء الطارئ (4)
+        elif screen_level == 4:
+            if days_passed > 10:
+                return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
+            elif days_passed >= 7:
+                return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
+                
+        return [''] * len(row)
+
+    return df.style.apply(highlight_row, axis=1)
+
+# --- دالة عرض الطلبات المشابهة التي مرت على نفس الشاشة (معتمدة، مرفوضة، أو معلقة) برقم نوبكو أو رقم البند ---
 def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_number, screen_level):
     sel_item = clean_code_val(item_num)
     sel_nupco = clean_code_val(nupco_number)
@@ -233,33 +263,20 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
     if df_others.empty:
         return
 
-    # تحديد الطلبات التي "مرت" على الشاشة الحالية حصراً (سواء علقت فيها، أو تم اعتمادها وانتقلت، أو رُفِضت فيها)
     if screen_level == 2:
-        # الشاشة 2 (المستشفى): الطلبات التي حالتها (التخطيط بالمستشفى، مرفوض من التخطيط بالمستشفى) أو تجاوزتها للإمداد/الطوارئ/معتمد
         valid_statuses = [
-            "التخطيط بالمستشفى", 
-            "مرفوض من التخطيط بالمستشفى", 
-            "التخطيط بالإمداد", 
-            "مرفوض من التخطيط بالإمداد", 
-            "لجنة الشراء الطارئ", 
-            "مرفوض من لجنة الشراء الطارئ", 
-            "معتمد"
+            "التخطيط بالمستشفى", "مرفوض من التخطيط بالمستشفى", 
+            "التخطيط بالإمداد", "مرفوض من التخطيط بالإمداد", 
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
         ]
     elif screen_level == 3:
-        # الشاشة 3 (الإمداد): الطلبات التي وصلت للإمداد فما فوق (التخطيط بالإمداد، مرفوض من الإمداد، لجنة الطوارئ، معتمد)
         valid_statuses = [
-            "التخطيط بالإمداد", 
-            "مرفوض من التخطيط بالإمداد", 
-            "لجنة الشراء الطارئ", 
-            "مرفوض من لجنة الشراء الطارئ", 
-            "معتمد"
+            "التخطيط بالإمداد", "مرفوض من التخطيط بالإمداد", 
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
         ]
     elif screen_level == 4:
-        # الشاشة 4 (لجنة الطوارئ): الطلبات التي وصلت للجنة الطوارئ فما فوق (لجنة الشراء الطارئ، مرفوض من الطوارئ، معتمد)
         valid_statuses = [
-            "لجنة الشراء الطارئ", 
-            "مرفوض من لجنة الشراء الطارئ", 
-            "معتمد"
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
         ]
     else:
         valid_statuses = []
@@ -271,7 +288,6 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
     df_others["clean_item_num"] = df_others["item_number"].apply(clean_code_val)
     df_others["clean_nupco_num"] = df_others["nupco_number"].apply(clean_code_val)
     
-    # مطابقة التشابه بناءً على رقم البند أو رقم نوبكو
     cond_item = (df_others["clean_item_num"] == sel_item) & (sel_item != "")
     cond_nupco = (df_others["clean_nupco_num"] == sel_nupco) & (sel_nupco != "")
     
@@ -284,15 +300,9 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
         similar_orders["total_cost"] = pd.to_numeric(similar_orders["total_cost"], errors="coerce").fillna(0.0)
         
         sim_view = similar_orders.rename(columns={
-            "id": "رقم الطلب", 
-            "hospital": "المستشفى", 
-            "item_number": "رقم البند", 
-            "nupco_number": "رقم نوبكو", 
-            "item_name": "اسم الصنف", 
-            "quantity": "الكمية", 
-            "total_cost": "الإجمالي", 
-            "status": "الحالة", 
-            "created_at": "تاريخ الإنشاء"
+            "id": "رقم الطلب", "hospital": "المستشفى", "item_number": "رقم البند", 
+            "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "quantity": "الكمية", 
+            "total_cost": "الإجمالي", "status": "الحالة", "created_at": "تاريخ الإنشاء"
         })
         st.dataframe(
             safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), 
@@ -301,7 +311,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
 
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد", "نسيت كلمة المرور؟"], horizontal=True)
@@ -459,7 +469,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -565,7 +575,6 @@ else:
         if not df_all_p.empty:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
-            # الشاشة الثانية تعرض حصراً الطلبات التي في حالة "التخطيط بالمستشفى" ولم تنتقل بعد
             df_review = df_all_p[(df_all_p["status"] == 'التخطيط بالمستشفى') & (df_all_p["hospital"] == review_hospital)]
         else:
             df_review = pd.DataFrame()
@@ -579,7 +588,7 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
-            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
@@ -611,7 +620,9 @@ else:
                                     break
                         st.success("تم الدمج بنجاح! (قم بتحديث البيانات)")
 
-            event = st.dataframe(safe_display_df(target_df_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
+            # تطبيق التلوين المباشر على جدول الشاشة الثانية
+            styled_df = style_delay_rows(safe_display_df(target_df_view), screen_level=2)
+            event = st.dataframe(styled_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
@@ -619,7 +630,6 @@ else:
                 req_id = int(selected_row_data["id"])
                 co = selected_row_data
                 
-                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الثانية (مستوى 2)
                 render_similar_orders_section(df_all_p, req_id, co["item_number"], co["nupco_number"], screen_level=2)
                 
                 st.markdown("---")
@@ -700,7 +710,6 @@ else:
             st.markdown("---")
 
         if not df_all_p.empty:
-            # الشاشة الثالثة تعرض فقط الطلبات التي تم تحويلها من الشاشة السابقة وحالتها "التخطيط بالإمداد"
             df_approve = df_all_p[df_all_p["status"] == 'التخطيط بالإمداد']
             if selected_app_filter != "جميع المستشفيات":
                 df_approve = df_approve[df_approve["hospital"] == selected_app_filter]
@@ -714,9 +723,11 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
-            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر 3 أيام فأكثر (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            event_app = st.dataframe(safe_display_df(df_approve_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
+            # تطبيق التلوين المباشر على جدول الشاشة الثالثة
+            styled_app = style_delay_rows(safe_display_df(df_approve_view), screen_level=3)
+            event_app = st.dataframe(styled_app, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
@@ -724,7 +735,6 @@ else:
                 app_req_id = int(selected_app_row["id"])
                 co = selected_app_row
                 
-                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الثالثة (مستوى 3)
                 render_similar_orders_section(df_all_p, app_req_id, co["item_number"], co["nupco_number"], screen_level=3)
                 
                 st.markdown("---")
@@ -805,7 +815,6 @@ else:
                 )
                 st.markdown("---")
 
-            # الشاشة الرابعة تعرض فقط الطلبات التي تم تحويلها من الإمداد وحالتها "لجنة الشراء الطارئ"
             df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
@@ -821,7 +830,9 @@ else:
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً بانتظار الاعتماد)")
             st.markdown("⚠️ **مفتاح تلوين التأخير (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            event_emg = st.dataframe(safe_display_df(df_emg_view), use_container_width=True, on_select="rerun", selection_mode="single-row")
+            # تطبيق التلوين المباشر على جدول الشاشة الرابعة (مع حدود 7 إلى 10 أيام و أكثر من 10 أيام)
+            styled_emg = style_delay_rows(safe_display_df(df_emg_view), screen_level=4)
+            event_emg = st.dataframe(styled_emg, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
@@ -829,7 +840,6 @@ else:
                 emg_req_id = int(selected_emg_row["id"])
                 co_emg = selected_emg_row
                 
-                # استدعاء دالة عرض الطلبات التي مرت على الشاشة الرابعة (مستوى 4)
                 render_similar_orders_section(df_all_p, emg_req_id, co_emg["item_number"], co_emg["nupco_number"], screen_level=4)
 
                 st.markdown("---")
