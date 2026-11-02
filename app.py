@@ -38,7 +38,7 @@ st.markdown("""
         color: white;
         border-radius: 10px;
         font-weight: bold;
-        border: none;
+        border: None;
         border-bottom: 4px solid #1e7e34;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
         transition: all 0.1s ease;
@@ -221,35 +221,55 @@ def safe_display_df(df):
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
-# --- دالة تلوين الصفوف حسب التأخير ---
-def style_delay_rows(df, screen_level=2):
-    if df.empty or 'تاريخ الإنشاء' not in df.columns:
-        return df
+# --- دالة تلوين الصفوف حسب التأخير بناءً على لحظة دخول الطلب لتلك الشاشة حصراً ---
+def style_delay_rows_by_screen(df_view, raw_df, screen_level=2):
+    if df_view.empty or 'رقم الطلب' not in df_view.columns:
+        return df_view
 
     def highlight_row(row):
         try:
-            created_dt = datetime.strptime(str(row['تاريخ الإنشاء']), "%Y-%m-%d %H:%M")
-            days_passed = (datetime.now() - created_dt).days
+            req_id = int(row['رقم الطلب'])
+            orig_row = raw_df[raw_df['id'].astype(int) == req_id]
+            if orig_row.empty:
+                return [''] * len(row)
+            
+            r_data = orig_row.iloc[0]
+            
+            # تحديد نقطة البداية لكل شاشة بناءً على وقت وصوله إليها فعلياً
+            if screen_level == 2:
+                target_time_str = str(r_data.get('created_at', ''))
+            elif screen_level == 3:
+                target_time_str = str(r_data.get('reviewed_at', '')) or str(r_data.get('created_at', ''))
+            elif screen_level == 4:
+                target_time_str = str(r_data.get('approved_at', '')) or str(r_data.get('created_at', ''))
+            else:
+                target_time_str = str(r_data.get('created_at', ''))
+
+            if not target_time_str or target_time_str == 'nan':
+                return [''] * len(row)
+
+            arrival_dt = datetime.strptime(target_time_str, "%Y-%m-%d %H:%M")
+            days_in_screen = (datetime.now() - arrival_dt).days
         except Exception:
-            days_passed = 0
+            days_in_screen = 0
 
         # شاشات المستشفى والإمداد (2 و 3)
         if screen_level in [2, 3]:
-            if days_passed >= 3:
+            if days_in_screen >= 3:
                 return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-            elif days_passed >= 1:
+            elif days_in_screen >= 1:
                 return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
         
         # شاشة لجنة الشراء الطارئ (4)
         elif screen_level == 4:
-            if days_passed > 10:
+            if days_in_screen > 10:
                 return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
-            elif days_passed >= 7:
+            elif days_in_screen >= 7:
                 return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
                 
         return [''] * len(row)
 
-    return df.style.apply(highlight_row, axis=1)
+    return df_view.style.apply(highlight_row, axis=1)
 
 # --- دالة عرض الطلبات المشابهة التي مرت على نفس الشاشة (معتمدة، مرفوضة، أو معلقة) برقم نوبكو أو رقم البند ---
 def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_number, screen_level):
@@ -469,7 +489,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -588,7 +608,7 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
-            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة دخول الطلب لهذه الشاشة):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
@@ -620,8 +640,8 @@ else:
                                     break
                         st.success("تم الدمج بنجاح! (قم بتحديث البيانات)")
 
-            # تطبيق التلوين المباشر على جدول الشاشة الثانية
-            styled_df = style_delay_rows(safe_display_df(target_df_view), screen_level=2)
+            # تطبيق التلوين المخصص للشاشة الثانية (محسوب من وقت الاستقبال في هذه الشاشة)
+            styled_df = style_delay_rows_by_screen(safe_display_df(target_df_view), df_all_p, screen_level=2)
             event = st.dataframe(styled_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
@@ -723,10 +743,10 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
-            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة وصول الطلب للإمداد):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            # تطبيق التلوين المباشر على جدول الشاشة الثالثة
-            styled_app = style_delay_rows(safe_display_df(df_approve_view), screen_level=3)
+            # تطبيق التلوين المخصص للشاشة الثالثة (محسوب من تاريخ التحويل للإمداد reviewed_at)
+            styled_app = style_delay_rows_by_screen(safe_display_df(df_approve_view), df_all_p, screen_level=3)
             event_app = st.dataframe(styled_app, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
@@ -828,10 +848,10 @@ else:
             })
             
             st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً بانتظار الاعتماد)")
-            st.markdown("⚠️ **مفتاح تلوين التأخير (الشاشة 4):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة وصول الطلب للجنة الطوارئ):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            # تطبيق التلوين المباشر على جدول الشاشة الرابعة (مع حدود 7 إلى 10 أيام و أكثر من 10 أيام)
-            styled_emg = style_delay_rows(safe_display_df(df_emg_view), screen_level=4)
+            # تطبيق التلوين المخصص للشاشة الرابعة (محسوب من تاريخ التحويل للجنة الطوارئ approved_at)
+            styled_emg = style_delay_rows_by_screen(safe_display_df(df_emg_view), df_all_p, screen_level=4)
             event_emg = st.dataframe(styled_emg, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
