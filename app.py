@@ -32,7 +32,6 @@ st.markdown("""
         margin-top: 10px;
         margin-bottom: 25px;
     }
-    /* تصميم موحد لكافة الأزرار بشكل ثلاثي الأبعاد (3D Buttons) */
     div.stButton > button:first-child, div.stFormSubmitButton > button:first-child {
         background: linear-gradient(135deg, #28a745 0%, #218838 100%);
         color: white;
@@ -45,7 +44,7 @@ st.markdown("""
         width: 100%;
     }
     div.stButton > button:first-child:hover, div.stFormSubmitButton > button:first-child:hover {
-        background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+        background: linear-gradient(135deg, #218838 100%, #1e7e34 100%);
         box-shadow: 0 6px 8px rgba(0, 0, 0, 0.25);
         transform: translateY(-1px);
     }
@@ -217,7 +216,9 @@ def safe_display_df(df):
         return df
     safe_df = df.copy()
     for col in safe_df.columns:
-        if col not in ["رقم الطلب", "السعر الأفرادي", "الكمية", "الإجمالي", "الرقم"]:
+        if col in ["السعر الأفرادي", "الإجمالي"]:
+            safe_df[col] = pd.to_numeric(safe_df[col], errors="coerce").fillna(0.0).apply(lambda x: f"{x:,.2f}")
+        elif col not in ["رقم الطلب", "الكمية", "الرقم"]:
             safe_df[col] = safe_df[col].astype(str).replace('nan', '')
     return safe_df
 
@@ -332,7 +333,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
         })
         st.dataframe(
             safe_display_df(sim_view[["رقم الطلب", "المستشفى", "رقم البند", "رقم نوبكو", "اسم الصنف", "الكمية", "الإجمالي", "الحالة", "تاريخ الإنشاء"]]), 
-            use_container_width=True
+            use_container_width=True, hide_index=True
         )
 
 # ==================== تسجيل الدخول والاستعادة ====================
@@ -471,7 +472,6 @@ else:
     screens = []
     roles = st.session_state.user_roles
     
-    # --- الترتيب الجديد للشاشات حسب طلبك ---
     if "رفع طلبات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)")
     if "مراجعة الطلبات" in roles or "مدير النظام (Admin)" in roles:
@@ -541,7 +541,7 @@ else:
 
             with col2:
                 item_name_input = st.text_input("4. اسم الصنف *", value=st.session_state.selected_name)
-                unit_price = st.number_input("5. السعر الأفرادي *", min_value=0.0, step=1.0, value=0.0)
+                unit_price = st.number_input("5. السعر الأفرادي *", min_value=0.0, step=1.0, value=0.0, format="%.2f")
                 quantity = st.number_input("6. الكمية المطلوبة *", min_value=1, step=1, value=1)
 
             with col3:
@@ -590,7 +590,7 @@ else:
                 "total_cost": "الإجمالي", "importance_criteria": "الأهمية", "reason": "السبب",
                 "status": "الحالة", "created_at": "تاريخ الإنشاء"
             })
-        st.dataframe(safe_display_df(df_my_orders), use_container_width=True)
+        st.dataframe(safe_display_df(df_my_orders), use_container_width=True, hide_index=True)
 
     # ==================== الشاشة 2 ====================
     elif selected_screen == "الشاشة 2: إدارة التخطيط بالمستشفى":
@@ -650,7 +650,7 @@ else:
                         st.success("تم الدمج بنجاح! (قم بتحديث البيانات)")
 
             styled_df = style_delay_rows_by_screen(safe_display_df(target_df_view), df_all_p, screen_level=2)
-            event = st.dataframe(styled_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event = st.dataframe(styled_df, use_container_width=True, on_select="rerun", selection_mode="single-row", hide_index=True)
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
             
             if selected_rows:
@@ -671,7 +671,7 @@ else:
                     with c2:
                         new_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
                         saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
-                        new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                        new_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, format="%.2f")
                         saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
                         new_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
                     with c3:
@@ -754,7 +754,7 @@ else:
             st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             styled_app = style_delay_rows_by_screen(safe_display_df(df_approve_view), df_all_p, screen_level=3)
-            event_app = st.dataframe(styled_app, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_app = st.dataframe(styled_app, use_container_width=True, on_select="rerun", selection_mode="single-row", hide_index=True)
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
             
             if sel_rows_app:
@@ -775,7 +775,7 @@ else:
                     with c2:
                         app_item_name = st.text_input("اسم الصنف", value=str(co["item_name"]))
                         saved_unit_price = float(co["unit_price"]) if not pd.isna(co["unit_price"]) else 0.0
-                        app_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0)
+                        app_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, format="%.2f")
                         saved_qty = int(co["quantity"]) if not pd.isna(co["quantity"]) else 1
                         app_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1)
                     with c3:
@@ -844,7 +844,7 @@ else:
             st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             styled_emg = style_delay_rows_by_screen(safe_display_df(df_emg_view), df_all_p, screen_level=4)
-            event_emg = st.dataframe(styled_emg, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_emg = st.dataframe(styled_emg, use_container_width=True, on_select="rerun", selection_mode="single-row", hide_index=True)
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
             
             if sel_rows_emg:
@@ -865,7 +865,7 @@ else:
                     with c2:
                         emg_item_name = st.text_input("اسم الصنف", value=str(co_emg["item_name"]), key="emg_na")
                         saved_unit_price = float(co_emg["unit_price"]) if not pd.isna(co_emg["unit_price"]) else 0.0
-                        emg_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="emg_pr")
+                        emg_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, format="%.2f", key="emg_pr")
                         saved_qty = int(co_emg["quantity"]) if not pd.isna(co_emg["quantity"]) else 1
                         emg_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="emg_qu")
                     with c3:
@@ -948,7 +948,7 @@ else:
             st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             styled_holding = style_delay_rows_by_screen(safe_display_df(df_holding_view), df_all_p, screen_level=5)
-            event_holding = st.dataframe(styled_holding, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            event_holding = st.dataframe(styled_holding, use_container_width=True, on_select="rerun", selection_mode="single-row", hide_index=True)
             sel_rows_holding = event_holding.selection.rows if hasattr(event_holding, "selection") else []
             
             if sel_rows_holding:
@@ -969,7 +969,7 @@ else:
                     with c2:
                         holding_item_name = st.text_input("اسم الصنف", value=str(co_holding["item_name"]), key="holding_na")
                         saved_unit_price = float(co_holding["unit_price"]) if not pd.isna(co_holding["unit_price"]) else 0.0
-                        holding_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="holding_pr")
+                        holding_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, format="%.2f", key="holding_pr")
                         saved_qty = int(co_holding["quantity"]) if not pd.isna(co_holding["quantity"]) else 1
                         holding_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="holding_qu")
                     with c3:
@@ -1058,7 +1058,7 @@ else:
                     "type": "النوع", "content": "المحتوى", "created_at": "تاريخ الإرسال",
                     "status": "الحالة", "admin_reply": "رد الإدارة"
                 })
-                st.dataframe(safe_display_df(view_c_df), use_container_width=True)
+                st.dataframe(safe_display_df(view_c_df), use_container_width=True, hide_index=True)
                 
                 if "مدير النظام (Admin)" in st.session_state.user_roles:
                     st.markdown("---")
@@ -1146,7 +1146,7 @@ else:
                 "reviewer_notes": "ملاحظات المراجعة", "approver_notes": "ملاحظات الاعتماد"
             })
             
-            st.dataframe(safe_display_df(view_search_df), use_container_width=True)
+            st.dataframe(safe_display_df(view_search_df), use_container_width=True, hide_index=True)
         else:
             st.info("لا توجد طلبات مسجلة في النظام للبحث عنها.")
 
@@ -1249,7 +1249,7 @@ else:
             st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
             df_app_dash = df_all[df_all['status'] == 'معتمد']
             if not df_app_dash.empty:
-                st.dataframe(safe_display_df(df_app_dash), use_container_width=True)
+                st.dataframe(safe_display_df(df_app_dash), use_container_width=True, hide_index=True)
             else:
                 st.info("لا توجد طلبات معتمدة نهائياً حتى الآن.")
         else:
@@ -1258,7 +1258,7 @@ else:
         if "مدير النظام (Admin)" in st.session_state.user_roles:
             st.markdown("---")
             st.subheader("👥 ملخص الحسابات والمستخدمين في النظام")
-            st.dataframe(safe_display_df(users_df), use_container_width=True)
+            st.dataframe(safe_display_df(users_df), use_container_width=True, hide_index=True)
 
     # ==================== الشاشة 9 ====================
     elif selected_screen == "الشاشة 9: إدارة الصلاحيات":
