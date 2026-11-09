@@ -17,7 +17,7 @@ HOSPITALS_LIST = [
 ]
 
 # --- إعداد الصفحة والتصميم الأساسي ---
-st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide")
+st.set_page_config(page_title="نظام تتبع عمليات الشراء المباشر", layout="wide", page_icon="🚀")
 
 st.markdown("""
     <style>
@@ -101,7 +101,7 @@ def load_data_to_session():
         recs = ws_users.get_all_records()
         if not recs:
             admin_pw = make_hashes("admin123")
-            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد,اعتماد لجنة الشراء الطارئ,البحث الشامل,الشكاوى والاقتراحات"
+            admin_roles = "مدير النظام (Admin),رفع طلبات,مراجعة الطلبات,معتمد الطلبات,إدارة الصلاحيات,عرض الداش بورد,اعتماد لجنة الشراء الطارئ,اعتماد الشركة القابضة,البحث الشامل,الشكاوى والاقتراحات"
             ws_users.update([
                 ["username", "password", "roles", "status", "hospital"],
                 ["admin", admin_pw, admin_roles, "معتمد", "مجمع الملك فيصل"]
@@ -242,6 +242,8 @@ def style_delay_rows_by_screen(df_view, raw_df, screen_level=2):
                 target_time_str = str(r_data.get('reviewed_at', '')) or str(r_data.get('created_at', ''))
             elif screen_level == 4:
                 target_time_str = str(r_data.get('approved_at', '')) or str(r_data.get('created_at', ''))
+            elif screen_level == 9:
+                target_time_str = str(r_data.get('holding_at', '')) or str(r_data.get('approved_at', '')) or str(r_data.get('created_at', ''))
             else:
                 target_time_str = str(r_data.get('created_at', ''))
 
@@ -260,8 +262,8 @@ def style_delay_rows_by_screen(df_view, raw_df, screen_level=2):
             elif days_in_screen >= 1:
                 return ['background-color: #fff3cd; color: #856404; font-weight: bold;'] * len(row)
         
-        # شاشة لجنة الشراء الطارئ (4)
-        elif screen_level == 4:
+        # شاشة لجنة الشراء الطارئ والشركة القابضة (4 و 9)
+        elif screen_level in [4, 9]:
             if days_in_screen > 10:
                 return ['background-color: #ffcccc; color: #990000; font-weight: bold;'] * len(row)
             elif days_in_screen >= 7:
@@ -287,16 +289,23 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
         valid_statuses = [
             "التخطيط بالمستشفى", "مرفوض من التخطيط بالمستشفى", 
             "التخطيط بالإمداد", "مرفوض من التخطيط بالإمداد", 
-            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", 
+            "الشركة القابضة", "مرفوض من الشركة القابضة", "معتمد"
         ]
     elif screen_level == 3:
         valid_statuses = [
             "التخطيط بالإمداد", "مرفوض من التخطيط بالإمداد", 
-            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", 
+            "الشركة القابضة", "مرفوض من الشركة القابضة", "معتمد"
         ]
     elif screen_level == 4:
         valid_statuses = [
-            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", "معتمد"
+            "لجنة الشراء الطارئ", "مرفوض من لجنة الشراء الطارئ", 
+            "الشركة القابضة", "مرفوض من الشركة القابضة", "معتمد"
+        ]
+    elif screen_level == 9:
+        valid_statuses = [
+            "الشركة القابضة", "مرفوض من الشركة القابضة", "معتمد"
         ]
     else:
         valid_statuses = []
@@ -331,7 +340,7 @@ def render_similar_orders_section(df_all_p, current_req_id, item_num, nupco_numb
 
 # ==================== تسجيل الدخول والاستعادة بموافقة الأدمن ====================
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
     st.markdown("---")
     
     auth_mode = st.radio("اختر العملية:", ["تسجيل الدخول", "إنشاء حساب جديد", "نسيت كلمة المرور؟"], horizontal=True)
@@ -375,7 +384,7 @@ if not st.session_state.logged_in:
             new_user = st.text_input("اختر اسم مستخدم")
             new_pass = st.text_input("اختر كلمة المرور", type='password')
             selected_hospital = st.selectbox("اختر المستشفى التابع له *", HOSPITALS_LIST)
-            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات"]
+            all_available_roles = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "اعتماد الشركة القابضة", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات"]
             requested_roles = st.multiselect("الصلاحيات المطلوبة", all_available_roles, default=[])
             
             if st.form_submit_button("إرسال طلب التسجيل"):
@@ -473,6 +482,8 @@ else:
         screens.append("الشاشة 3: إدارة التخطيط بالإمداد")
     if "اعتماد لجنة الشراء الطارئ" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 4: اعتماد لجنة الشراء الطارئ")
+    if "اعتماد الشركة القابضة" in roles or "مدير النظام (Admin)" in roles:
+        screens.append("الشاشة 9: اعتماد الشركة القابضة")
     if "إدارة الصلاحيات" in roles or "مدير النظام (Admin)" in roles:
         screens.append("الشاشة 5: إدارة الصلاحيات")
     if "عرض الداش بورد" in roles or "مدير النظام (Admin)" in roles:
@@ -489,7 +500,7 @@ else:
     selected_screen = st.sidebar.radio("التنقل بين الشاشات:", screens)
     st.sidebar.markdown("---")
 
-    st.markdown('<div class="main-title"> نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🚀 نظام تتبع عمليات الشراء المباشر</div>', unsafe_allow_html=True)
 
     # ==================== الشاشة الأولى ====================
     if selected_screen == "الشاشة 1: رفع طلبات (إنشاء وتتبع الطلبات)":
@@ -608,7 +619,7 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات المعلقة للمراجعة")
-            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة دخول الطلب لهذه الشاشة):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
             nupco_list_filter = [n for n in df_review["nupco_number"].dropna().unique() if str(n).strip() != ""]
             nupco_filter = st.selectbox("تصفية ودمج حسب رقم نوبكو", ["الكل"] + nupco_list_filter)
@@ -640,7 +651,6 @@ else:
                                     break
                         st.success("تم الدمج بنجاح! (قم بتحديث البيانات)")
 
-            # تطبيق التلوين المخصص للشاشة الثانية (محسوب من وقت الاستقبال في هذه الشاشة)
             styled_df = style_delay_rows_by_screen(safe_display_df(target_df_view), df_all_p, screen_level=2)
             event = st.dataframe(styled_df, use_container_width=True, on_select="rerun", selection_mode="single-row")
             selected_rows = event.selection.rows if hasattr(event, "selection") else []
@@ -743,9 +753,8 @@ else:
             })
             
             st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي")
-            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة وصول الطلب للإمداد):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر يوم إلى 3 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 3 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            # تطبيق التلوين المخصص للشاشة الثالثة (محسوب من تاريخ التحويل للإمداد reviewed_at)
             styled_app = style_delay_rows_by_screen(safe_display_df(df_approve_view), df_all_p, screen_level=3)
             event_app = st.dataframe(styled_app, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_app = event_app.selection.rows if hasattr(event_app, "selection") else []
@@ -821,20 +830,6 @@ else:
             df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
             df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
             
-            df_emg_approved_export = df_all_p[df_all_p["status"] == 'معتمد']
-            if selected_emg_filter != "جميع المستشفيات":
-                df_emg_approved_export = df_emg_approved_export[df_emg_approved_export["hospital"] == selected_emg_filter]
-
-            if not df_emg_approved_export.empty:
-                excel_bytes_emg = to_excel_bytes(df_emg_approved_export)
-                st.download_button(
-                    label="📥 تصدير قائمة طلبات الطوارئ المعتمدة إلى ملف Excel (.xls)",
-                    data=excel_bytes_emg,
-                    file_name=f"emergency_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
-                    mime="application/vnd.ms-excel"
-                )
-                st.markdown("---")
-
             df_emergency = df_all_p[df_all_p["status"] == 'لجنة الشراء الطارئ']
             if selected_emg_filter != "جميع المستشفيات":
                 df_emergency = df_emergency[df_emergency["hospital"] == selected_emg_filter]
@@ -847,10 +842,9 @@ else:
                 "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب", "created_at": "تاريخ الإنشاء"
             })
             
-            st.subheader("📦 قائمة طلبات الشراء الطارئة (الحرجة جداً بانتظار الاعتماد)")
-            st.markdown("⚠️ **مفتاح تلوين التأخير (يبدأ من لحظة وصول الطلب للجنة الطوارئ):** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
+            st.subheader("📦 قائمة طلبات الشراء الطارئة (بانتظار اعتماد اللجنة)")
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
             
-            # تطبيق التلوين المخصص للشاشة الرابعة (محسوب من تاريخ التحويل للجنة الطوارئ approved_at)
             styled_emg = style_delay_rows_by_screen(safe_display_df(df_emg_view), df_all_p, screen_level=4)
             event_emg = st.dataframe(styled_emg, use_container_width=True, on_select="rerun", selection_mode="single-row")
             sel_rows_emg = event_emg.selection.rows if hasattr(event_emg, "selection") else []
@@ -884,12 +878,12 @@ else:
                         emg_reason = st.text_area("السبب / المبرر", value=str(co_emg["reason"] or ""), key="emg_re")
                     
                     emg_notes = st.text_input("ملاحظات لجنة الشراء الطارئ", key="emg_no")
-                    emg_action = st.selectbox("قرار اللجنة الطارئة", ["اعتماد", "رفض"], key="emg_ac")
+                    emg_action = st.selectbox("قرار اللجنة الطارئة", ["تحويل إلى الشركة القابضة", "رفض الطلب"], key="emg_ac")
                     
                     if st.form_submit_button("حفظ وتنفيذ قرار لجنة الطوارئ"):
                         emg_total = float(emg_unit_price * emg_quantity)
                         now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        emg_final_status = "معتمد" if emg_action == "اعتماد" else "مرفوض من لجنة الشراء الطارئ"
+                        emg_final_status = "الشركة القابضة" if emg_action == "تحويل إلى الشركة القابضة" else "مرفوض من لجنة الشراء الطارئ"
                         
                         ws_p = get_worksheet("purchases")
                         all_rows = ws_p.get_all_records()
@@ -909,10 +903,114 @@ else:
                                 ws_p.update_cell(idx, 18, str(emg_notes))
                                 break
                         st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == emg_req_id, "status"] = emg_final_status
-                        st.success("✅ تم تحديث ومعالجة طلب الشراء بنجاح!")
+                        st.success("✅ تم تحديث ومعالجة طلب الشراء ونقله للشركة القابضة بنجاح!")
                         st.rerun()
         else:
             st.info(f"لا توجد طلبات طارئة بانتظار لجنة الطوارئ في ({selected_emg_filter}).")
+
+    # ==================== الشاشة التاسعة (اعتماد الشركة القابضة) ====================
+    elif selected_screen == "الشاشة 9: اعتماد الشركة القابضة":
+        holding_hospital_selection = ["جميع المستشفيات"] + HOSPITALS_LIST
+        selected_holding_filter = st.selectbox("اختيار المستشفى للشركة القابضة:", holding_hospital_selection, index=0, key="holding_hosp_sb")
+
+        st.header(f"🏢 الشاشة التاسعة: اعتماد الشركة القابضة ({selected_holding_filter})")
+        df_all_p = st.session_state.db_purchases
+        
+        if not df_all_p.empty:
+            df_all_p["unit_price"] = pd.to_numeric(df_all_p["unit_price"], errors="coerce").fillna(0.0)
+            df_all_p["total_cost"] = pd.to_numeric(df_all_p["total_cost"], errors="coerce").fillna(0.0)
+            
+            df_holding_approved_export = df_all_p[df_all_p["status"] == 'معتمد']
+            if selected_holding_filter != "جميع المستشفيات":
+                df_holding_approved_export = df_holding_approved_export[df_holding_approved_export["hospital"] == selected_holding_filter]
+
+            if not df_holding_approved_export.empty:
+                excel_bytes_holding = to_excel_bytes(df_holding_approved_export)
+                st.download_button(
+                    label="📥 تصدير قائمة الطلبات المعتمدة نهائياً من الشركة القابضة إلى ملف Excel (.xls)",
+                    data=excel_bytes_holding,
+                    file_name=f"holding_approved_purchases_{datetime.now().strftime('%Y%m%d_%H%M')}.xls",
+                    mime="application/vnd.ms-excel"
+                )
+                st.markdown("---")
+
+            df_holding = df_all_p[df_all_p["status"] == 'الشركة القابضة']
+            if selected_holding_filter != "جميع المستشفيات":
+                df_holding = df_holding[df_holding["hospital"] == selected_holding_filter]
+        else:
+            df_holding = pd.DataFrame()
+        
+        if not df_holding.empty:
+            df_holding_view = df_holding.rename(columns={
+                "id": "رقم الطلب", "requester": "المستخدم", "hospital": "المستشفى", "item_number": "رقم البند",
+                "nupco_number": "رقم نوبكو", "item_name": "اسم الصنف", "total_cost": "الإجمالي", "status": "الحالة", "reason": "السبب", "created_at": "تاريخ الإنشاء"
+            })
+            
+            st.subheader("📦 قائمة الطلبات بانتظار الاعتماد النهائي للشركة القابضة")
+            st.markdown("⚠️ **مفتاح تلوين التأخير:** <span style='background-color: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px;'>متأخر 7-10 أيام (أصفر)</span> | <span style='background-color: #ffcccc; color: #990000; padding: 2px 6px; border-radius: 4px;'>متأخر أكثر من 10 أيام (أحمر)</span>", unsafe_allow_html=True)
+            
+            styled_holding = style_delay_rows_by_screen(safe_display_df(df_holding_view), df_all_p, screen_level=9)
+            event_holding = st.dataframe(styled_holding, use_container_width=True, on_select="rerun", selection_mode="single-row")
+            sel_rows_holding = event_holding.selection.rows if hasattr(event_holding, "selection") else []
+            
+            if sel_rows_holding:
+                selected_holding_row = df_holding.iloc[sel_rows_holding[0]]
+                holding_req_id = int(selected_holding_row["id"])
+                co_holding = selected_holding_row
+                
+                render_similar_orders_section(df_all_p, holding_req_id, co_holding["item_number"], co_holding["nupco_number"], screen_level=9)
+
+                st.markdown("---")
+                st.subheader(f"⚖️ تعديل ومعالجة طلب الشركة القابضة رقم: {holding_req_id}")
+                with st.form(f"holding_action_form_{holding_req_id}", clear_on_submit=False):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        holding_item_number = st.text_input("رقم البند", value=str(co_holding["item_number"]), key="holding_in")
+                        holding_nupco_number = st.text_input("رقم نوبكو", value=str(co_holding["nupco_number"]), key="holding_nu")
+                        holding_e_market_code = st.text_input("كود السوق", value=str(co_holding["e_market_code"]), key="holding_em")
+                    with c2:
+                        holding_item_name = st.text_input("اسم الصنف", value=str(co_holding["item_name"]), key="holding_na")
+                        saved_unit_price = float(co_holding["unit_price"]) if not pd.isna(co_holding["unit_price"]) else 0.0
+                        holding_unit_price = st.number_input("السعر الأفرادي", value=saved_unit_price, min_value=0.0, step=1.0, key="holding_pr")
+                        saved_qty = int(co_holding["quantity"]) if not pd.isna(co_holding["quantity"]) else 1
+                        holding_quantity = st.number_input("الكمية", value=saved_qty, min_value=1, step=1, key="holding_qu")
+                    with c3:
+                        curr_imp = str(co_holding["importance_criteria"])
+                        imp_options = ["عالي جداً (حرج)", "عالي", "متوسط", "منخفض"]
+                        imp_idx = imp_options.index(curr_imp) if curr_imp in imp_options else 0
+                        holding_importance = st.selectbox("معيار الأهمية", imp_options, index=imp_idx, key="holding_im")
+                        holding_reason = st.text_area("السبب / المبرر", value=str(co_holding["reason"] or ""), key="holding_re")
+                    
+                    holding_notes = st.text_input("ملاحظات الشركة القابضة", key="holding_no")
+                    holding_action = st.selectbox("قرار الشركة القابضة", ["اعتماد نهائي", "رفض"], key="holding_ac")
+                    
+                    if st.form_submit_button("حفظ وتنفيذ قرار الشركة القابضة"):
+                        holding_total = float(holding_unit_price * holding_quantity)
+                        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        holding_final_status = "معتمد" if holding_action == "اعتماد نهائي" else "مرفوض من الشركة القابضة"
+                        
+                        ws_p = get_worksheet("purchases")
+                        all_rows = ws_p.get_all_records()
+                        for idx, row in enumerate(all_rows, start=2):
+                            if int(row.get("id", 0)) == int(holding_req_id):
+                                ws_p.update_cell(idx, 4, str(holding_item_number))
+                                ws_p.update_cell(idx, 5, str(holding_nupco_number))
+                                ws_p.update_cell(idx, 6, str(holding_e_market_code))
+                                ws_p.update_cell(idx, 7, str(holding_item_name))
+                                ws_p.update_cell(idx, 8, float(holding_unit_price))
+                                ws_p.update_cell(idx, 9, int(holding_quantity))
+                                ws_p.update_cell(idx, 10, float(holding_total))
+                                ws_p.update_cell(idx, 11, str(holding_importance))
+                                ws_p.update_cell(idx, 12, str(holding_reason))
+                                ws_p.update_cell(idx, 13, str(holding_final_status))
+                                ws_p.update_cell(idx, 16, str(now_str))
+                                ws_p.update_cell(idx, 18, str(holding_notes))
+                                break
+                        st.session_state.db_purchases.loc[st.session_state.db_purchases["id"] == holding_req_id, "status"] = holding_final_status
+                        st.success("✅ تم تحديث ومعالجة طلب الشركة القابضة بنجاح!")
+                        st.rerun()
+        else:
+            st.info(f"لا توجد طلبات بانتظار الاعتماد من الشركة القابضة في ({selected_holding_filter}).")
 
     # ==================== الشاشة الخامسة (إدارة الصلاحيات) ====================
     elif selected_screen == "الشاشة 5: إدارة الصلاحيات":
@@ -964,7 +1062,7 @@ else:
                     
                     with st.form("direct_user_edit_form"):
                         updated_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST, index=HOSPITALS_LIST.index(curr_hosp))
-                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
+                        all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "اعتماد الشركة القابضة", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
                         updated_roles = st.multiselect("الصلاحيات الممنوحة", all_roles_options, default=[r for r in curr_roles if r in all_roles_options])
                         status_options = ["معتمد", "قيد الانتظار", "قيد إعادة تعيين كلمة المرور", "موقوف"]
                         updated_status = st.selectbox("حالة الحساب (اختر معتمد للموافقة)", status_options, index=status_options.index(curr_status) if curr_status in status_options else 0)
@@ -984,7 +1082,7 @@ else:
                     new_u_name = st.text_input("اسم المستخدم الجديد")
                     new_u_pass = st.text_input("كلمة المرور", type="password")
                     new_u_hosp = st.selectbox("المستشفى التابع له", HOSPITALS_LIST)
-                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
+                    all_roles_options = ["رفع طلبات", "مراجعة الطلبات", "معتمد الطلبات", "اعتماد لجنة الشراء الطارئ", "اعتماد الشركة القابضة", "إدارة الصلاحيات", "عرض الداش بورد", "البحث الشامل", "الشكاوى والاقتراحات", "مدير النظام (Admin)"]
                     new_u_roles = st.multiselect("الصلاحيات", all_roles_options, default=["رفع طلبات"])
                     
                     if st.form_submit_button("إضافة المستخدم"):
@@ -1024,15 +1122,19 @@ else:
             
             hosp_pending = len(df_all[df_all['status'] == 'التخطيط بالمستشفى'])
             hosp_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالمستشفى'])
-            hosp_approved = len(df_all[df_all['status'].isin(['التخطيط بالإمداد', 'لجنة الشراء الطارئ', 'معتمد', 'مرفوض من التخطيط بالإمداد', 'مرفوض من لجنة الشراء الطارئ'])])
+            hosp_approved = len(df_all[df_all['status'].isin(['التخطيط بالإمداد', 'لجنة الشراء الطارئ', 'الشركة القابضة', 'معتمد', 'مرفوض من التخطيط بالإمداد', 'مرفوض من لجنة الشراء الطارئ', 'مرفوض من الشركة القابضة'])])
 
             supply_pending = len(df_all[df_all['status'] == 'التخطيط بالإمداد'])
             supply_rejected = len(df_all[df_all['status'] == 'مرفوض من التخطيط بالإمداد'])
-            supply_approved = len(df_all[df_all['status'].isin(['لجنة الشراء الطارئ', 'معتمد', 'مرفوض من لجنة الشراء الطارئ'])])
+            supply_approved = len(df_all[df_all['status'].isin(['لجنة الشراء الطارئ', 'الشركة القابضة', 'معتمد', 'مرفوض من لجنة الشراء الطارئ', 'مرفوض من الشركة القابضة'])])
 
             emg_pending = len(df_all[df_all['status'] == 'لجنة الشراء الطارئ'])
             emg_rejected = len(df_all[df_all['status'] == 'مرفوض من لجنة الشراء الطارئ'])
-            emg_approved = len(df_all[df_all['status'] == 'معتمد'])
+            emg_approved = len(df_all[df_all['status'].isin(['الشركة القابضة', 'معتمد', 'مرفوض من الشركة القابضة'])])
+
+            holding_pending = len(df_all[df_all['status'] == 'الشركة القابضة'])
+            holding_rejected = len(df_all[df_all['status'] == 'مرفوض من الشركة القابضة'])
+            holding_approved = len(df_all[df_all['status'] == 'معتمد'])
 
             df_emg_approved_total = df_all[df_all['status'] == 'معتمد']
             emg_approved_cost = df_emg_approved_total['total_cost'].sum() if not df_emg_approved_total.empty else 0.0
@@ -1040,77 +1142,56 @@ else:
             st.metric("📦 إجمالي كافة الطلبات بالمستشفى / النظام", total_orders)
             st.markdown("---")
 
-            col_hosp, col_supply, col_emg = st.columns(3)
+            col_hosp, col_supply, col_emg, col_holding = st.columns(4)
             with col_hosp:
-                st.subheader("🏥 إدارة تخطيط المستشفى")
-                st.metric("الطلبات المعتمدة", hosp_approved)
-                st.metric("الطلبات المرفوضة", hosp_rejected)
-                st.metric("الطلبات المعلقة", hosp_pending)
+                st.subheader("🏥 المستشفى")
+                st.metric("المعتمدة", hosp_approved)
+                st.metric("المرفوضة", hosp_rejected)
+                st.metric("المعلقة", hosp_pending)
 
             with col_supply:
-                st.subheader("📦 إدارة تخطيط الإمداد")
-                st.metric("الطلبات المعتمدة", supply_approved)
-                st.metric("الطلبات المرفوضة", supply_rejected)
-                st.metric("الطلبات المعلقة", supply_pending)
+                st.subheader("📦 الإمداد")
+                st.metric("المعتمدة", supply_approved)
+                st.metric("المرفوضة", supply_rejected)
+                st.metric("المعلقة", supply_pending)
 
             with col_emg:
-                st.subheader("🚨 لجنة الشراء الطارئ")
-                st.metric("الطلبات المعتمدة", emg_approved)
-                st.metric("الطلبات المرفوضة", emg_rejected)
-                st.metric("الطلبات المعلقة", emg_pending)
+                st.subheader("🚨 الطوارئ")
+                st.metric("المعتمدة", emg_approved)
+                st.metric("المرفوضة", emg_rejected)
+                st.metric("المعلقة", emg_pending)
+
+            with col_holding:
+                st.subheader("🏢 القابضة")
+                st.metric("المعتمدة", holding_approved)
+                st.metric("المرفوضة", holding_rejected)
+                st.metric("المعلقة", holding_pending)
 
             st.markdown("---")
-            st.subheader("💰 التكلفة الإجمالية للطلبات المعتمدة في لجنة الشراء الطارئ")
+            st.subheader("💰 التكلفة الإجمالية للطلبات المعتمدة نهائياً")
             st.metric("التكلفة الإجمالية المعتمدة", f"{emg_approved_cost:,.2f} ر.س")
 
             st.markdown("---")
             st.subheader("⏱️ مؤشرات متوسط التأخير في كل شاشة (بالأيام)")
             
             df_s2_pending = df_all[df_all['status'] == 'التخطيط بالمستشفى']
-            avg_delay_s2 = 0.0
-            if not df_s2_pending.empty:
-                dates_s2 = pd.to_datetime(df_s2_pending['created_at'], errors='coerce')
-                avg_delay_s2 = ((datetime.now() - dates_s2).dt.total_seconds() / 86400).mean()
+            avg_delay_s2 = ((datetime.now() - pd.to_datetime(df_s2_pending['created_at'], errors='coerce')).dt.total_seconds() / 86400).mean() if not df_s2_pending.empty else 0.0
 
             df_s3_pending = df_all[df_all['status'] == 'التخطيط بالإمداد']
-            avg_delay_s3 = 0.0
-            if not df_s3_pending.empty:
-                ref_s3 = df_s3_pending['reviewed_at'].apply(lambda x: x if str(x).strip() != "" else None).fillna(df_s3_pending['created_at'])
-                dates_s3 = pd.to_datetime(ref_s3, errors='coerce')
-                avg_delay_s3 = ((datetime.now() - dates_s3).dt.total_seconds() / 86400).mean()
+            avg_delay_s3 = ((datetime.now() - pd.to_datetime(df_s3_pending['reviewed_at'], errors='coerce')).dt.total_seconds() / 86400).mean() if not df_s3_pending.empty else 0.0
 
             df_s4_pending = df_all[df_all['status'] == 'لجنة الشراء الطارئ']
-            avg_delay_s4 = 0.0
-            if not df_s4_pending.empty:
-                ref_s4 = df_s4_pending['approved_at'].apply(lambda x: x if str(x).strip() != "" else None).fillna(df_s4_pending['created_at'])
-                dates_s4 = pd.to_datetime(ref_s4, errors='coerce')
-                avg_delay_s4 = ((datetime.now() - dates_s4).dt.total_seconds() / 86400).mean()
+            avg_delay_s4 = ((datetime.now() - pd.to_datetime(df_s4_pending['approved_at'], errors='coerce')).dt.total_seconds() / 86400).mean() if not df_s4_pending.empty else 0.0
 
-            dc1, dc2, dc3 = st.columns(3)
-            dc1.metric("معدل تأخير (شاشة التخطيط بالمستشفى)", f"{avg_delay_s2:.1f} يوم")
-            dc2.metric("معدل تأخير (شاشة التخطيط بالإمداد)", f"{avg_delay_s3:.1f} يوم")
-            dc3.metric("معدل تأخير (شاشة لجنة الشراء الطارئ)", f"{avg_delay_s4:.1f} يوم")
-            
-            st.markdown("---")
-            st.subheader("📊 الرسوم البيانية (عمودان لكل مستشفى)")
-            
-            chart_data_list = []
-            target_hospitals_for_chart = HOSPITALS_LIST if "مدير النظام (Admin)" in st.session_state.user_roles else [st.session_state.user_hospital]
-            
-            for hosp in target_hospitals_for_chart:
-                h_df = st.session_state.db_purchases[st.session_state.db_purchases['hospital'] == hosp] if not st.session_state.db_purchases.empty else pd.DataFrame()
-                tot_req = len(h_df)
-                h_app = len(h_df[h_df['status'] == 'معتمد'])
-                h_rej = len(h_df[h_df['status'].str.contains('مرفوض', na=False)])
-                h_pen = tot_req - (h_app + h_rej)
-                
-                chart_data_list.append({"المستشفى": hosp, "مجموع الطلبات المرفوعة": tot_req, "طلبات معتمدة": h_app, "طلبات مرفوضة": h_rej, "طلبات معلقة": h_pen})
-            
-            df_chart = pd.DataFrame(chart_data_list)
-            if not df_chart.empty:
-                df_chart.set_index("المستشفى", inplace=True)
-                st.bar_chart(df_chart)
+            df_s9_pending = df_all[df_all['status'] == 'الشركة القابضة']
+            avg_delay_s9 = ((datetime.now() - pd.to_datetime(df_s9_pending['approved_at'], errors='coerce')).dt.total_seconds() / 86400).mean() if not df_s9_pending.empty else 0.0
 
+            dc1, dc2, dc3, dc4 = st.columns(4)
+            dc1.metric("تأخير (المستشفى)", f"{avg_delay_s2:.1f} يوم")
+            dc2.metric("تأخير (الإمداد)", f"{avg_delay_s3:.1f} يوم")
+            dc3.metric("تأخير (الطوارئ)", f"{avg_delay_s4:.1f} يوم")
+            dc4.metric("تأخير (القابضة)", f"{avg_delay_s9:.1f} يوم")
+            
             st.markdown("---")
             st.subheader("📋 تفاصيل كافة الطلبات المعتمدة نهائياً")
             df_app_dash = df_all[df_all['status'] == 'معتمد']
